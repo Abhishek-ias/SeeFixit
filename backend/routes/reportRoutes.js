@@ -1,0 +1,1342 @@
+const express = require("express");
+
+const router = express.Router();
+
+const pool = require("../db/database");
+
+const authenticateToken = require("../middleware/authMiddleware");
+const requireRole = require("../middleware/requireRole");
+const validate = require("../middleware/validate");
+
+const {
+    sendSuccess,
+    sendError
+} = require("../utils/response");
+
+const {
+    createReportSchema
+} = require("../validation/reportValidation");
+
+
+// ======================================================
+// REPORTS
+// ======================================================
+
+
+// ======================================================
+// POST /api/reports
+// Create a new report
+// CITIZEN or ADMIN
+// ======================================================
+
+/**
+ * @swagger
+ * /api/reports:
+ *   post:
+ *     summary: Create a civic issue report
+ *     description: Creates a report and associates it with an existing nearby CivicIssue or creates a new CivicIssue.
+ *     tags:
+ *       - Reports
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - category
+ *               - latitude
+ *               - longitude
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: "Broken street light near bus stand"
+ *               description:
+ *                 type: string
+ *                 example: "Street light is not working near the bus stand."
+ *               category:
+ *                 type: string
+ *                 enum:
+ *                   - ROAD
+ *                   - SANITATION
+ *                   - WATER
+ *                 example: ROAD
+ *               latitude:
+ *                 type: number
+ *                 example: 16.85
+ *               longitude:
+ *                 type: number
+ *                 example: 77.72
+ *               image:
+ *                 type: string
+ *                 example: "uploads/reports/streetlight.jpg"
+ *     responses:
+ *       201:
+ *         description: Report created successfully
+ *       400:
+ *         description: Validation failed or invalid category
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Access denied
+ */
+
+router.post(
+    "/reports",
+    validate(createReportSchema),
+    authenticateToken,
+    requireRole("CITIZEN", "ADMIN"),
+    async (req, res, next) => {
+
+        try {
+
+            const {
+                title,
+                description,
+                category,
+                latitude,
+                longitude,
+                image
+            } = req.body;
+
+
+            // ------------------------------------------
+            // Decide department
+            // ------------------------------------------
+
+            let departmentId;
+
+            if (category === "ROAD") {
+
+                departmentId = 1;
+
+            } else if (category === "SANITATION") {
+
+                departmentId = 2;
+
+            } else if (category === "WATER") {
+
+                departmentId = 3;
+
+            } else {
+
+                return sendError(
+                    res,
+                    400,
+                    "Invalid category"
+                );
+
+            }
+
+
+            // ------------------------------------------
+            // Find nearby CivicIssue
+            // ------------------------------------------
+
+            const findIssueQuery = `
+                SELECT id
+                FROM civic_issues
+                WHERE category = $1
+                AND latitude BETWEEN $2 AND $3
+                AND longitude BETWEEN $4 AND $5
+                LIMIT 1;
+            `;
+
+
+            const findIssueValues = [
+                category,
+                latitude - 0.001,
+                latitude + 0.001,
+                longitude - 0.001,
+                longitude + 0.001
+            ];
+
+
+            const issueResult = await pool.query(
+                findIssueQuery,
+                findIssueValues
+            );
+
+
+            let civicIssueId;
+
+
+            // ------------------------------------------
+            // Use existing issue
+            // ------------------------------------------
+
+            if (issueResult.rows.length > 0) {
+
+                civicIssueId =
+                    issueResult.rows[0].id;
+
+            }
+
+
+            // ------------------------------------------
+            // Create new issue
+            // ------------------------------------------
+
+            else {
+
+                const createIssueQuery = `
+                    INSERT INTO civic_issues (
+                        title,
+                        category,
+                        status,
+                        priority_score,
+                        latitude,
+                        longitude,
+                        department_id
+                    )
+                    VALUES (
+                        $1,
+                        $2,
+                        'OPEN',
+                        50,
+                        $3,
+                        $4,
+                        $5
+                    )
+                    RETURNING id;
+                `;
+
+
+                const createIssueValues = [
+                    title,
+                    category,
+                    latitude,
+                    longitude,
+                    departmentId
+                ];
+
+
+                const newIssueResult = await pool.query(
+                    createIssueQuery,
+                    createIssueValues
+                );
+
+
+                civicIssueId =
+                    newIssueResult.rows[0].id;
+
+            }
+
+
+            // ------------------------------------------
+            // Create report
+            // user_id comes from JWT
+            // ------------------------------------------
+
+            const insertReportQuery = `
+                INSERT INTO reports (
+                    user_id,
+                    civic_issue_id,
+                    title,
+                    description,
+                    category,
+                    image
+                )
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING *;
+            `;
+
+
+            const insertReportValues = [
+                req.user.userId,
+                civicIssueId,
+                title,
+                description,
+                category,
+                image
+            ];
+
+
+            const reportResult = await pool.query(
+                insertReportQuery,
+                insertReportValues
+            );
+
+
+            return sendSuccess(
+                res,
+                201,
+                "Report created successfully",
+                reportResult.rows[0]
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// CIVIC ISSUES
+// ======================================================
+
+
+// ======================================================
+// GET /api/issues
+// Get all CivicIssues
+// PUBLIC
+// ======================================================
+
+/**
+ * @swagger
+ * /api/issues:
+ *   get:
+ *     summary: Get all civic issues
+ *     description: Returns a list of all CivicIssues.
+ *     tags:
+ *       - Issues
+ *     responses:
+ *       200:
+ *         description: Issues fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Issues fetched successfully"
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Issue'
+ */
+
+router.get(
+    "/issues",
+    async (req, res, next) => {
+
+        try {
+
+            const query = `
+                SELECT
+                    civic_issues.id AS issue_id,
+                    civic_issues.title AS issue_title,
+                    civic_issues.category,
+                    civic_issues.status,
+                    civic_issues.priority_score,
+                    departments.name AS department_name,
+                    COUNT(reports.id) AS report_count
+                FROM civic_issues
+                JOIN departments
+                    ON civic_issues.department_id = departments.id
+                LEFT JOIN reports
+                    ON civic_issues.id = reports.civic_issue_id
+                GROUP BY
+                    civic_issues.id,
+                    civic_issues.title,
+                    civic_issues.category,
+                    civic_issues.status,
+                    civic_issues.priority_score,
+                    departments.name;
+            `;
+
+
+            const result = await pool.query(query);
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Issues fetched successfully",
+                result.rows
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/issues/:id
+// Get complete CivicIssue details
+// AUTHENTICATED USERS
+// ======================================================
+
+/**
+ * @swagger
+ * /api/issues/{id}:
+ *   get:
+ *     summary: Get a civic issue by ID
+ *     description: Returns complete details of a CivicIssue.
+ *     tags:
+ *       - Issues
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 3
+ *     responses:
+ *       200:
+ *         description: Issue details fetched successfully
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: CivicIssue not found
+ */
+
+router.get(
+    "/issues/:id",
+    authenticateToken,
+    async (req, res, next) => {
+
+        try {
+
+            const issueId = req.params.id;
+
+
+            // ------------------------------------------
+            // Get issue
+            // ------------------------------------------
+
+            const issueQuery = `
+                SELECT
+                    civic_issues.id AS issue_id,
+                    civic_issues.title AS issue_title,
+                    civic_issues.category,
+                    civic_issues.status,
+                    civic_issues.priority_score,
+                    civic_issues.latitude,
+                    civic_issues.longitude,
+                    departments.name AS department_name
+                FROM civic_issues
+                JOIN departments
+                    ON civic_issues.department_id = departments.id
+                WHERE civic_issues.id = $1;
+            `;
+
+
+            const issueResult = await pool.query(
+                issueQuery,
+                [issueId]
+            );
+
+
+            if (issueResult.rows.length === 0) {
+
+                return sendError(
+                    res,
+                    404,
+                    "CivicIssue not found"
+                );
+
+            }
+
+
+            // ------------------------------------------
+            // Get reports
+            // ------------------------------------------
+
+            const reportsQuery = `
+                SELECT *
+                FROM reports
+                WHERE civic_issue_id = $1
+                ORDER BY id ASC;
+            `;
+
+
+            const reportsResult = await pool.query(
+                reportsQuery,
+                [issueId]
+            );
+
+
+            // ------------------------------------------
+            // Get history
+            // ------------------------------------------
+
+            const historyQuery = `
+                SELECT
+                    issue_status_history.id,
+                    issue_status_history.status,
+                    issue_status_history.changed_by,
+                    users.name AS changed_by_name,
+                    issue_status_history.changed_at,
+                    issue_status_history.evidence
+                FROM issue_status_history
+                JOIN users
+                    ON issue_status_history.changed_by = users.id
+                WHERE issue_status_history.civic_issue_id = $1
+                ORDER BY issue_status_history.changed_at ASC;
+            `;
+
+
+            const historyResult = await pool.query(
+                historyQuery,
+                [issueId]
+            );
+
+
+            // ------------------------------------------
+            // Get evidence
+            // ------------------------------------------
+
+            const evidenceQuery = `
+                SELECT
+                    issue_evidence.id,
+                    issue_evidence.uploaded_by,
+                    users.name AS uploaded_by_name,
+                    issue_evidence.image,
+                    issue_evidence.description,
+                    issue_evidence.created_at
+                FROM issue_evidence
+                JOIN users
+                    ON issue_evidence.uploaded_by = users.id
+                WHERE issue_evidence.civic_issue_id = $1
+                ORDER BY issue_evidence.created_at ASC;
+            `;
+
+
+            const evidenceResult = await pool.query(
+                evidenceQuery,
+                [issueId]
+            );
+
+
+            // ------------------------------------------
+            // Response
+            // ------------------------------------------
+
+            return sendSuccess(
+                res,
+                200,
+                "Issue details fetched successfully",
+                {
+                    issue: issueResult.rows[0],
+                    reports: reportsResult.rows,
+                    history: historyResult.rows,
+                    evidence: evidenceResult.rows
+                }
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// PATCH /api/issues/:id/status
+// Change CivicIssue status
+// ADMIN ONLY
+// ======================================================
+
+/**
+ * @swagger
+ * /api/issues/{id}/status:
+ *   patch:
+ *     summary: Update civic issue status
+ *     description: Updates the status of a CivicIssue. Only ADMIN users can perform this operation.
+ *     tags:
+ *       - Issues
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 5
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum:
+ *                   - OPEN
+ *                   - IN_PROGRESS
+ *                   - RESOLVED
+ *                 example: IN_PROGRESS
+ *     responses:
+ *       200:
+ *         description: Issue status updated successfully
+ *       400:
+ *         description: Invalid status or invalid status transition
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Access denied. ADMIN role required.
+ *       404:
+ *         description: CivicIssue not found
+ */
+
+router.patch(
+    "/issues/:id/status",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+
+        const client = await pool.connect();
+
+        try {
+
+            const issueId = req.params.id;
+
+            const {
+                status
+            } = req.body;
+
+
+            // ------------------------------------------
+            // Validate status
+            // ------------------------------------------
+
+            const validStatuses = [
+                "OPEN",
+                "IN_PROGRESS",
+                "RESOLVED"
+            ];
+
+
+            if (!validStatuses.includes(status)) {
+
+                return sendError(
+                    res,
+                    400,
+                    "Invalid status"
+                );
+
+            }
+
+
+            // ------------------------------------------
+            // Get current issue
+            // ------------------------------------------
+
+            const issueQuery = `
+                SELECT *
+                FROM civic_issues
+                WHERE id = $1;
+            `;
+
+
+            const issueResult = await client.query(
+                issueQuery,
+                [issueId]
+            );
+
+
+            if (issueResult.rows.length === 0) {
+
+                return sendError(
+                    res,
+                    404,
+                    "CivicIssue not found"
+                );
+
+            }
+
+
+            const currentStatus =
+                issueResult.rows[0].status;
+
+
+            // ------------------------------------------
+            // OPEN → IN_PROGRESS
+            // ------------------------------------------
+
+            if (currentStatus === "OPEN") {
+
+                if (status !== "IN_PROGRESS") {
+
+                    return sendError(
+                        res,
+                        400,
+                        "OPEN issue can only move to IN_PROGRESS"
+                    );
+
+                }
+
+            }
+
+
+            // ------------------------------------------
+            // IN_PROGRESS → RESOLVED
+            // ------------------------------------------
+
+            else if (currentStatus === "IN_PROGRESS") {
+
+                if (status !== "RESOLVED") {
+
+                    return sendError(
+                        res,
+                        400,
+                        "IN_PROGRESS issue can only move to RESOLVED"
+                    );
+
+                }
+
+
+                // Evidence is required
+
+                const evidenceQuery = `
+                    SELECT id
+                    FROM issue_evidence
+                    WHERE civic_issue_id = $1
+                    LIMIT 1;
+                `;
+
+
+                const evidenceResult = await client.query(
+                    evidenceQuery,
+                    [issueId]
+                );
+
+
+                if (evidenceResult.rows.length === 0) {
+
+                    return sendError(
+                        res,
+                        400,
+                        "Cannot resolve issue without evidence"
+                    );
+
+                }
+
+            }
+
+
+            // ------------------------------------------
+            // RESOLVED → anything
+            // ------------------------------------------
+
+            else if (currentStatus === "RESOLVED") {
+
+                return sendError(
+                    res,
+                    400,
+                    "Resolved issue cannot change status"
+                );
+
+            }
+
+
+            // ------------------------------------------
+            // Start transaction
+            // ------------------------------------------
+
+            await client.query("BEGIN");
+
+
+            // ------------------------------------------
+            // Update issue
+            // ------------------------------------------
+
+            const updateQuery = `
+                UPDATE civic_issues
+                SET status = $1
+                WHERE id = $2
+                RETURNING *;
+            `;
+
+
+            const updateResult = await client.query(
+                updateQuery,
+                [status, issueId]
+            );
+
+
+            const updatedIssue =
+                updateResult.rows[0];
+
+
+            // ------------------------------------------
+            // Insert status history
+            // changed_by comes from JWT
+            // ------------------------------------------
+
+            const historyQuery = `
+                INSERT INTO issue_status_history (
+                    civic_issue_id,
+                    status,
+                    changed_by
+                )
+                VALUES ($1, $2, $3)
+                RETURNING *;
+            `;
+
+
+            const historyResult = await client.query(
+                historyQuery,
+                [
+                    issueId,
+                    status,
+                    req.user.userId
+                ]
+            );
+
+
+            // ------------------------------------------
+            // Commit
+            // ------------------------------------------
+
+            await client.query("COMMIT");
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Issue status updated successfully",
+                {
+                    issue: updatedIssue,
+                    history: historyResult.rows[0]
+                }
+            );
+
+        }
+
+        catch (error) {
+
+            try {
+
+                await client.query("ROLLBACK");
+
+            }
+
+            catch (rollbackError) {
+
+                console.error(
+                    "Rollback error:",
+                    rollbackError
+                );
+
+            }
+
+
+            next(error);
+
+        }
+
+        finally {
+
+            client.release();
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// STATUS HISTORY
+// ======================================================
+
+
+// ======================================================
+// GET /api/issues/:id/history
+// Get status history
+// AUTHENTICATED USERS
+// ======================================================
+
+
+/**
+ * @swagger
+ * /api/issues/{id}/history:
+ *   get:
+ *     summary: Get issue status history
+ *     description: Returns the complete status history of a CivicIssue.
+ *     tags:
+ *       - Status History
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 3
+ *     responses:
+ *       200:
+ *         description: Status history fetched successfully
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: CivicIssue not found
+ */
+
+router.get(
+    "/issues/:id/history",
+    authenticateToken,
+    async (req, res, next) => {
+
+        try {
+
+            const issueId = req.params.id;
+
+
+            const query = `
+                SELECT
+                    issue_status_history.id,
+                    issue_status_history.civic_issue_id,
+                    issue_status_history.status,
+                    issue_status_history.changed_by,
+                    users.name AS changed_by_name,
+                    issue_status_history.changed_at,
+                    issue_status_history.evidence
+                FROM issue_status_history
+                JOIN users
+                    ON issue_status_history.changed_by = users.id
+                WHERE issue_status_history.civic_issue_id = $1
+                ORDER BY issue_status_history.changed_at ASC;
+            `;
+
+
+            const result = await pool.query(
+                query,
+                [issueId]
+            );
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Status history fetched successfully",
+                result.rows
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// EVIDENCE
+// ======================================================
+
+
+// ======================================================
+// POST /api/issues/:id/evidence
+// Upload evidence
+// ADMIN ONLY
+// ======================================================
+
+
+/**
+ * @swagger
+ * /api/issues/{id}/evidence:
+ *   post:
+ *     summary: Upload issue evidence
+ *     description: Adds repair or resolution evidence to a CivicIssue. Only ADMIN users can upload evidence.
+ *     tags:
+ *       - Evidence
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 3
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image:
+ *                 type: string
+ *                 example: "uploads/evidence/streetlight-fixed.jpg"
+ *               description:
+ *                 type: string
+ *                 example: "Street light has been repaired and is working properly."
+ *     responses:
+ *       201:
+ *         description: Evidence uploaded successfully
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Access denied. ADMIN role required.
+ *       404:
+ *         description: CivicIssue not found
+ */
+
+router.post(
+    "/issues/:id/evidence",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+
+        try {
+
+            const civicIssueId =
+                req.params.id;
+
+            const {
+                image,
+                description
+            } = req.body;
+
+
+            const query = `
+                INSERT INTO issue_evidence (
+                    civic_issue_id,
+                    uploaded_by,
+                    image,
+                    description
+                )
+                VALUES ($1, $2, $3, $4)
+                RETURNING *;
+            `;
+
+
+            const values = [
+                civicIssueId,
+                req.user.userId,
+                image,
+                description
+            ];
+
+
+            const result = await pool.query(
+                query,
+                values
+            );
+
+
+            return sendSuccess(
+                res,
+                201,
+                "Evidence uploaded successfully",
+                result.rows[0]
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/issues/:id/evidence
+// Get evidence
+// AUTHENTICATED USERS
+// ======================================================
+
+
+/**
+ * @swagger
+ * /api/issues/{id}/evidence:
+ *   get:
+ *     summary: Get issue evidence
+ *     description: Returns all evidence associated with a CivicIssue.
+ *     tags:
+ *       - Evidence
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 3
+ *     responses:
+ *       200:
+ *         description: Evidence fetched successfully
+ *       401:
+ *         description: Authentication required
+ *       404:
+ *         description: CivicIssue not found
+ */
+
+router.get(
+    "/issues/:id/evidence",
+    authenticateToken,
+    async (req, res, next) => {
+
+        try {
+
+            const issueId = req.params.id;
+
+
+            const query = `
+                SELECT
+                    issue_evidence.id,
+                    issue_evidence.civic_issue_id,
+                    issue_evidence.uploaded_by,
+                    users.name AS uploaded_by_name,
+                    issue_evidence.image,
+                    issue_evidence.description,
+                    issue_evidence.created_at
+                FROM issue_evidence
+                JOIN users
+                    ON issue_evidence.uploaded_by = users.id
+                WHERE issue_evidence.civic_issue_id = $1
+                ORDER BY issue_evidence.created_at ASC;
+            `;
+
+
+            const result = await pool.query(
+                query,
+                [issueId]
+            );
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Evidence fetched successfully",
+                result.rows
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// MY REPORTS
+// ======================================================
+
+
+// ======================================================
+// GET /api/my-reports
+// Get reports created by logged-in citizen
+// CITIZEN ONLY
+// ======================================================
+
+
+/**
+ * @swagger
+ * /api/my-reports:
+ *   get:
+ *     summary: Get my reports
+ *     description: Returns all reports created by the currently authenticated citizen.
+ *     tags:
+ *       - My Reports
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Your reports fetched successfully
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Access denied. CITIZEN role required.
+ */
+
+router.get(
+    "/my-reports",
+    authenticateToken,
+    requireRole("CITIZEN"),
+    async (req, res, next) => {
+
+        try {
+
+            const query = `
+                SELECT
+                    reports.id AS report_id,
+                    reports.civic_issue_id,
+                    reports.title,
+                    reports.description,
+                    reports.category,
+                    reports.image,
+                    civic_issues.status AS issue_status,
+                    civic_issues.priority_score
+                FROM reports
+                JOIN civic_issues
+                    ON reports.civic_issue_id = civic_issues.id
+                WHERE reports.user_id = $1
+                ORDER BY reports.id DESC;
+            `;
+
+
+            const result = await pool.query(
+                query,
+                [req.user.userId]
+            );
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Your reports fetched successfully",
+                result.rows
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/my-reports/:id
+// Get one report belonging to logged-in citizen
+// CITIZEN ONLY
+// ======================================================
+
+/**
+ * @swagger
+ * /api/my-reports/{id}:
+ *   get:
+ *     summary: Get one of my reports
+ *     description: Returns a specific report belonging to the currently authenticated citizen.
+ *     tags:
+ *       - My Reports
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 11
+ *     responses:
+ *       200:
+ *         description: Report fetched successfully
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Access denied. CITIZEN role required.
+ *       404:
+ *         description: Report not found
+ */
+
+router.get(
+    "/my-reports/:id",
+    authenticateToken,
+    requireRole("CITIZEN"),
+    async (req, res, next) => {
+
+        try {
+
+            const reportId =
+                req.params.id;
+
+
+            const query = `
+                SELECT
+                    reports.id AS report_id,
+                    reports.user_id,
+                    reports.civic_issue_id,
+                    reports.title,
+                    reports.description,
+                    reports.category,
+                    reports.image,
+                    civic_issues.status AS issue_status,
+                    civic_issues.priority_score
+                FROM reports
+                JOIN civic_issues
+                    ON reports.civic_issue_id = civic_issues.id
+                WHERE reports.id = $1
+                AND reports.user_id = $2;
+            `;
+
+
+            const result = await pool.query(
+                query,
+                [
+                    reportId,
+                    req.user.userId
+                ]
+            );
+
+
+            if (result.rows.length === 0) {
+
+                return sendError(
+                    res,
+                    404,
+                    "Report not found"
+                );
+
+            }
+
+
+            return sendSuccess(
+                res,
+                200,
+                "Report fetched successfully",
+                result.rows[0]
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// EXPORT
+// ======================================================
+
+module.exports = router;
