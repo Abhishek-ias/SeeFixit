@@ -18,6 +18,9 @@ const {
 } = require("../validation/reportValidation");
 
 
+const AppError = require("../utils/AppError");
+
+
 // ======================================================
 // REPORTS
 // ======================================================
@@ -440,16 +443,14 @@ router.get(
                 [issueId]
             );
 
+if (issueResult.rows.length === 0) {
 
-            if (issueResult.rows.length === 0) {
+    throw new AppError(
+        "CivicIssue not found",
+        404
+    );
 
-                return sendError(
-                    res,
-                    404,
-                    "CivicIssue not found"
-                );
-
-            }
+}
 
 
             // ------------------------------------------
@@ -660,13 +661,12 @@ router.patch(
 
             if (issueResult.rows.length === 0) {
 
-                return sendError(
-                    res,
-                    404,
-                    "CivicIssue not found"
-                );
+    throw new AppError(
+        "CivicIssue not found",
+        404
+    );
 
-            }
+}
 
 
             const currentStatus =
@@ -1307,13 +1307,12 @@ router.get(
 
             if (result.rows.length === 0) {
 
-                return sendError(
-                    res,
-                    404,
-                    "Report not found"
-                );
+    throw new AppError(
+        "Report not found",
+        404
+    );
 
-            }
+}
 
 
             return sendSuccess(
@@ -1333,6 +1332,9 @@ router.get(
 
     }
 );
+
+
+
 
 
 // ======================================================
