@@ -38,7 +38,7 @@ const createReportSchema = Joi.object({
         .allow("")
         .optional()
 
-});
+}).unknown(false);
 
 
 module.exports = {

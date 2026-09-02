@@ -87,7 +87,7 @@ function authenticateToken(req, res, next) {
 
         return sendError(
             res,
-            403,
+            401,
             "Invalid or expired token"
         );
 
