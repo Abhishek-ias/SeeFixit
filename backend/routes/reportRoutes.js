@@ -7,6 +7,7 @@ const pool = require("../db/database");
 const authenticateToken = require("../middleware/authMiddleware");
 const requireRole = require("../middleware/requireRole");
 const validate = require("../middleware/validate");
+const validateId = require("../middleware/validateId");
 
 const {
     sendSuccess,
@@ -16,7 +17,6 @@ const {
 const {
     createReportSchema
 } = require("../validation/reportValidation");
-
 
 const AppError = require("../utils/AppError");
 
@@ -306,21 +306,6 @@ router.post(
  *     responses:
  *       200:
  *         description: Issues fetched successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Issues fetched successfully"
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Issue'
  */
 
 router.get(
@@ -381,45 +366,16 @@ router.get(
 // AUTHENTICATED USERS
 // ======================================================
 
-/**
- * @swagger
- * /api/issues/{id}:
- *   get:
- *     summary: Get a civic issue by ID
- *     description: Returns complete details of a CivicIssue.
- *     tags:
- *       - Issues
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 3
- *     responses:
- *       200:
- *         description: Issue details fetched successfully
- *       401:
- *         description: Authentication required
- *       404:
- *         description: CivicIssue not found
- */
-
 router.get(
     "/issues/:id",
     authenticateToken,
+    validateId,
     async (req, res, next) => {
 
         try {
 
             const issueId = req.params.id;
 
-
-            // ------------------------------------------
-            // Get issue
-            // ------------------------------------------
 
             const issueQuery = `
                 SELECT
@@ -443,19 +399,16 @@ router.get(
                 [issueId]
             );
 
-if (issueResult.rows.length === 0) {
 
-    throw new AppError(
-        "CivicIssue not found",
-        404
-    );
+            if (issueResult.rows.length === 0) {
 
-}
+                throw new AppError(
+                    "CivicIssue not found",
+                    404
+                );
 
+            }
 
-            // ------------------------------------------
-            // Get reports
-            // ------------------------------------------
 
             const reportsQuery = `
                 SELECT *
@@ -470,10 +423,6 @@ if (issueResult.rows.length === 0) {
                 [issueId]
             );
 
-
-            // ------------------------------------------
-            // Get history
-            // ------------------------------------------
 
             const historyQuery = `
                 SELECT
@@ -497,10 +446,6 @@ if (issueResult.rows.length === 0) {
             );
 
 
-            // ------------------------------------------
-            // Get evidence
-            // ------------------------------------------
-
             const evidenceQuery = `
                 SELECT
                     issue_evidence.id,
@@ -522,10 +467,6 @@ if (issueResult.rows.length === 0) {
                 [issueId]
             );
 
-
-            // ------------------------------------------
-            // Response
-            // ------------------------------------------
 
             return sendSuccess(
                 res,
@@ -557,56 +498,11 @@ if (issueResult.rows.length === 0) {
 // ADMIN ONLY
 // ======================================================
 
-/**
- * @swagger
- * /api/issues/{id}/status:
- *   patch:
- *     summary: Update civic issue status
- *     description: Updates the status of a CivicIssue. Only ADMIN users can perform this operation.
- *     tags:
- *       - Issues
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 5
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum:
- *                   - OPEN
- *                   - IN_PROGRESS
- *                   - RESOLVED
- *                 example: IN_PROGRESS
- *     responses:
- *       200:
- *         description: Issue status updated successfully
- *       400:
- *         description: Invalid status or invalid status transition
- *       401:
- *         description: Authentication required
- *       403:
- *         description: Access denied. ADMIN role required.
- *       404:
- *         description: CivicIssue not found
- */
-
 router.patch(
     "/issues/:id/status",
     authenticateToken,
     requireRole("ADMIN"),
+    validateId,
     async (req, res, next) => {
 
         const client = await pool.connect();
@@ -619,10 +515,6 @@ router.patch(
                 status
             } = req.body;
 
-
-            // ------------------------------------------
-            // Validate status
-            // ------------------------------------------
 
             const validStatuses = [
                 "OPEN",
@@ -642,10 +534,6 @@ router.patch(
             }
 
 
-            // ------------------------------------------
-            // Get current issue
-            // ------------------------------------------
-
             const issueQuery = `
                 SELECT *
                 FROM civic_issues
@@ -661,21 +549,17 @@ router.patch(
 
             if (issueResult.rows.length === 0) {
 
-    throw new AppError(
-        "CivicIssue not found",
-        404
-    );
+                throw new AppError(
+                    "CivicIssue not found",
+                    404
+                );
 
-}
+            }
 
 
             const currentStatus =
                 issueResult.rows[0].status;
 
-
-            // ------------------------------------------
-            // OPEN → IN_PROGRESS
-            // ------------------------------------------
 
             if (currentStatus === "OPEN") {
 
@@ -692,10 +576,6 @@ router.patch(
             }
 
 
-            // ------------------------------------------
-            // IN_PROGRESS → RESOLVED
-            // ------------------------------------------
-
             else if (currentStatus === "IN_PROGRESS") {
 
                 if (status !== "RESOLVED") {
@@ -708,8 +588,6 @@ router.patch(
 
                 }
 
-
-                // Evidence is required
 
                 const evidenceQuery = `
                     SELECT id
@@ -738,10 +616,6 @@ router.patch(
             }
 
 
-            // ------------------------------------------
-            // RESOLVED → anything
-            // ------------------------------------------
-
             else if (currentStatus === "RESOLVED") {
 
                 return sendError(
@@ -760,10 +634,6 @@ router.patch(
             await client.query("BEGIN");
 
 
-            // ------------------------------------------
-            // Update issue
-            // ------------------------------------------
-
             const updateQuery = `
                 UPDATE civic_issues
                 SET status = $1
@@ -781,11 +651,6 @@ router.patch(
             const updatedIssue =
                 updateResult.rows[0];
 
-
-            // ------------------------------------------
-            // Insert status history
-            // changed_by comes from JWT
-            // ------------------------------------------
 
             const historyQuery = `
                 INSERT INTO issue_status_history (
@@ -807,10 +672,6 @@ router.patch(
                 ]
             );
 
-
-            // ------------------------------------------
-            // Commit
-            // ------------------------------------------
 
             await client.query("COMMIT");
 
@@ -870,36 +731,10 @@ router.patch(
 // AUTHENTICATED USERS
 // ======================================================
 
-
-/**
- * @swagger
- * /api/issues/{id}/history:
- *   get:
- *     summary: Get issue status history
- *     description: Returns the complete status history of a CivicIssue.
- *     tags:
- *       - Status History
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 3
- *     responses:
- *       200:
- *         description: Status history fetched successfully
- *       401:
- *         description: Authentication required
- *       404:
- *         description: CivicIssue not found
- */
-
 router.get(
     "/issues/:id/history",
     authenticateToken,
+    validateId,
     async (req, res, next) => {
 
         try {
@@ -960,52 +795,11 @@ router.get(
 // ADMIN ONLY
 // ======================================================
 
-
-/**
- * @swagger
- * /api/issues/{id}/evidence:
- *   post:
- *     summary: Upload issue evidence
- *     description: Adds repair or resolution evidence to a CivicIssue. Only ADMIN users can upload evidence.
- *     tags:
- *       - Evidence
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 3
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               image:
- *                 type: string
- *                 example: "uploads/evidence/streetlight-fixed.jpg"
- *               description:
- *                 type: string
- *                 example: "Street light has been repaired and is working properly."
- *     responses:
- *       201:
- *         description: Evidence uploaded successfully
- *       401:
- *         description: Authentication required
- *       403:
- *         description: Access denied. ADMIN role required.
- *       404:
- *         description: CivicIssue not found
- */
-
 router.post(
     "/issues/:id/evidence",
     authenticateToken,
     requireRole("ADMIN"),
+    validateId,
     async (req, res, next) => {
 
         try {
@@ -1070,36 +864,10 @@ router.post(
 // AUTHENTICATED USERS
 // ======================================================
 
-
-/**
- * @swagger
- * /api/issues/{id}/evidence:
- *   get:
- *     summary: Get issue evidence
- *     description: Returns all evidence associated with a CivicIssue.
- *     tags:
- *       - Evidence
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 3
- *     responses:
- *       200:
- *         description: Evidence fetched successfully
- *       401:
- *         description: Authentication required
- *       404:
- *         description: CivicIssue not found
- */
-
 router.get(
     "/issues/:id/evidence",
     authenticateToken,
+    validateId,
     async (req, res, next) => {
 
         try {
@@ -1160,26 +928,6 @@ router.get(
 // CITIZEN ONLY
 // ======================================================
 
-
-/**
- * @swagger
- * /api/my-reports:
- *   get:
- *     summary: Get my reports
- *     description: Returns all reports created by the currently authenticated citizen.
- *     tags:
- *       - My Reports
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Your reports fetched successfully
- *       401:
- *         description: Authentication required
- *       403:
- *         description: Access denied. CITIZEN role required.
- */
-
 router.get(
     "/my-reports",
     authenticateToken,
@@ -1237,38 +985,11 @@ router.get(
 // CITIZEN ONLY
 // ======================================================
 
-/**
- * @swagger
- * /api/my-reports/{id}:
- *   get:
- *     summary: Get one of my reports
- *     description: Returns a specific report belonging to the currently authenticated citizen.
- *     tags:
- *       - My Reports
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         example: 11
- *     responses:
- *       200:
- *         description: Report fetched successfully
- *       401:
- *         description: Authentication required
- *       403:
- *         description: Access denied. CITIZEN role required.
- *       404:
- *         description: Report not found
- */
-
 router.get(
     "/my-reports/:id",
     authenticateToken,
     requireRole("CITIZEN"),
+    validateId,
     async (req, res, next) => {
 
         try {
@@ -1307,12 +1028,12 @@ router.get(
 
             if (result.rows.length === 0) {
 
-    throw new AppError(
-        "Report not found",
-        404
-    );
+                throw new AppError(
+                    "Report not found",
+                    404
+                );
 
-}
+            }
 
 
             return sendSuccess(
@@ -1332,9 +1053,6 @@ router.get(
 
     }
 );
-
-
-
 
 
 // ======================================================
