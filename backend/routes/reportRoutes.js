@@ -16,7 +16,8 @@ const {
     getIssueEvidence,
     getMyReports,
     getMyReportById,
-    createReport
+    createReport,
+    getIssueDetails
 } = require("../services/issueService");
 
 const {
@@ -240,94 +241,8 @@ router.get(
             const issueId = req.params.id;
 
 
-            const issueQuery = `
-                SELECT
-                    civic_issues.id AS issue_id,
-                    civic_issues.title AS issue_title,
-                    civic_issues.category,
-                    civic_issues.status,
-                    civic_issues.priority_score,
-                    civic_issues.latitude,
-                    civic_issues.longitude,
-                    departments.name AS department_name
-                FROM civic_issues
-                JOIN departments
-                    ON civic_issues.department_id = departments.id
-                WHERE civic_issues.id = $1;
-            `;
-
-
-            const issueResult = await pool.query(
-                issueQuery,
-                [issueId]
-            );
-
-
-            if (issueResult.rows.length === 0) {
-
-                throw new AppError(
-                    "CivicIssue not found",
-                    404
-                );
-
-            }
-
-
-            const reportsQuery = `
-                SELECT *
-                FROM reports
-                WHERE civic_issue_id = $1
-                ORDER BY id ASC;
-            `;
-
-
-            const reportsResult = await pool.query(
-                reportsQuery,
-                [issueId]
-            );
-
-
-            const historyQuery = `
-                SELECT
-                    issue_status_history.id,
-                    issue_status_history.status,
-                    issue_status_history.changed_by,
-                    users.name AS changed_by_name,
-                    issue_status_history.changed_at,
-                    issue_status_history.evidence
-                FROM issue_status_history
-                JOIN users
-                    ON issue_status_history.changed_by = users.id
-                WHERE issue_status_history.civic_issue_id = $1
-                ORDER BY issue_status_history.changed_at ASC;
-            `;
-
-
-            const historyResult = await pool.query(
-                historyQuery,
-                [issueId]
-            );
-
-
-            const evidenceQuery = `
-                SELECT
-                    issue_evidence.id,
-                    issue_evidence.uploaded_by,
-                    users.name AS uploaded_by_name,
-                    issue_evidence.image,
-                    issue_evidence.description,
-                    issue_evidence.created_at
-                FROM issue_evidence
-                JOIN users
-                    ON issue_evidence.uploaded_by = users.id
-                WHERE issue_evidence.civic_issue_id = $1
-                ORDER BY issue_evidence.created_at ASC;
-            `;
-
-
-            const evidenceResult = await pool.query(
-                evidenceQuery,
-                [issueId]
+            const issueDetails = await getIssueDetails(
+                issueId
             );
 
 
@@ -335,12 +250,7 @@ router.get(
                 res,
                 200,
                 "Issue details fetched successfully",
-                {
-                    issue: issueResult.rows[0],
-                    reports: reportsResult.rows,
-                    history: historyResult.rows,
-                    evidence: evidenceResult.rows
-                }
+                issueDetails
             );
 
         }
