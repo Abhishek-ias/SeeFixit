@@ -211,6 +211,32 @@ async function updateIssueStatus(issueId, status, userId) {
 }
 
 
+async function getIssueHistory(issueId) {
+
+    const query = `
+        SELECT
+            issue_status_history.id,
+            issue_status_history.civic_issue_id,
+            issue_status_history.status,
+            issue_status_history.changed_by,
+            users.name AS changed_by_name,
+            issue_status_history.changed_at,
+            issue_status_history.evidence
+        FROM issue_status_history
+        JOIN users
+            ON issue_status_history.changed_by = users.id
+        WHERE issue_status_history.civic_issue_id = $1
+        ORDER BY issue_status_history.changed_at ASC;
+    `;
+
+    const result = await pool.query(
+        query,
+        [issueId]
+    );
+
+    return result.rows;
+}
 module.exports = {
-    updateIssueStatus
+    updateIssueStatus,
+    getIssueHistory
 };
