@@ -12,7 +12,8 @@ const validateId = require("../middleware/validateId");
 const {
     updateIssueStatus,
     getIssueHistory,
-    uploadEvidence
+    uploadEvidence,
+    getIssueEvidence
 } = require("../services/issueService");
 
 const {
@@ -664,34 +665,14 @@ router.get(
             const issueId = req.params.id;
 
 
-            const query = `
-                SELECT
-                    issue_evidence.id,
-                    issue_evidence.civic_issue_id,
-                    issue_evidence.uploaded_by,
-                    users.name AS uploaded_by_name,
-                    issue_evidence.image,
-                    issue_evidence.description,
-                    issue_evidence.created_at
-                FROM issue_evidence
-                JOIN users
-                    ON issue_evidence.uploaded_by = users.id
-                WHERE issue_evidence.civic_issue_id = $1
-                ORDER BY issue_evidence.created_at ASC;
-            `;
-
-
-            const result = await pool.query(
-                query,
-                [issueId]
-            );
+            const evidence = await getIssueEvidence(issueId);
 
 
             return sendSuccess(
                 res,
                 200,
                 "Evidence fetched successfully",
-                result.rows
+                evidence
             );
 
         }
