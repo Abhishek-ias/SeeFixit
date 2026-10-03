@@ -236,7 +236,44 @@ async function getIssueHistory(issueId) {
 
     return result.rows;
 }
+
+
+async function uploadEvidence(
+    civicIssueId,
+    userId,
+    image,
+    description
+) {
+
+    const query = `
+        INSERT INTO issue_evidence (
+            civic_issue_id,
+            uploaded_by,
+            image,
+            description
+        )
+        VALUES ($1, $2, $3, $4)
+        RETURNING *;
+    `;
+
+    const values = [
+        civicIssueId,
+        userId,
+        image,
+        description
+    ];
+
+    const result = await pool.query(
+        query,
+        values
+    );
+
+    return result.rows[0];
+}
+
+
 module.exports = {
     updateIssueStatus,
-    getIssueHistory
+    getIssueHistory,
+    uploadEvidence
 };

@@ -11,7 +11,8 @@ const validateId = require("../middleware/validateId");
 
 const {
     updateIssueStatus,
-    getIssueHistory
+    getIssueHistory,
+    uploadEvidence
 } = require("../services/issueService");
 
 const {
@@ -619,29 +620,11 @@ router.post(
             } = req.body;
 
 
-            const query = `
-                INSERT INTO issue_evidence (
-                    civic_issue_id,
-                    uploaded_by,
-                    image,
-                    description
-                )
-                VALUES ($1, $2, $3, $4)
-                RETURNING *;
-            `;
-
-
-            const values = [
+            const evidence = await uploadEvidence(
                 civicIssueId,
                 req.user.userId,
                 image,
                 description
-            ];
-
-
-            const result = await pool.query(
-                query,
-                values
             );
 
 
@@ -649,7 +632,7 @@ router.post(
                 res,
                 201,
                 "Evidence uploaded successfully",
-                result.rows[0]
+                evidence
             );
 
         }
