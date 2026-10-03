@@ -15,7 +15,8 @@ const {
     uploadEvidence,
     getIssueEvidence,
     getMyReports,
-    getMyReportById
+    getMyReportById,
+    createReport
 } = require("../services/issueService");
 
 const {
@@ -145,140 +146,21 @@ router.post(
             }
 
 
-            // ------------------------------------------
-            // Find nearby CivicIssue
-            // ------------------------------------------
-
-            const findIssueQuery = `
-                SELECT id
-                FROM civic_issues
-                WHERE category = $1
-                AND latitude BETWEEN $2 AND $3
-                AND longitude BETWEEN $4 AND $5
-                LIMIT 1;
-            `;
-
-
-            const findIssueValues = [
-                category,
-                latitude - 0.001,
-                latitude + 0.001,
-                longitude - 0.001,
-                longitude + 0.001
-            ];
-
-
-            const issueResult = await pool.query(
-                findIssueQuery,
-                findIssueValues
-            );
-
-
-            let civicIssueId;
-
-
-            // ------------------------------------------
-            // Use existing issue
-            // ------------------------------------------
-
-            if (issueResult.rows.length > 0) {
-
-                civicIssueId =
-                    issueResult.rows[0].id;
-
-            }
-
-
-            // ------------------------------------------
-            // Create new issue
-            // ------------------------------------------
-
-            else {
-
-                const createIssueQuery = `
-                    INSERT INTO civic_issues (
-                        title,
-                        category,
-                        status,
-                        priority_score,
-                        latitude,
-                        longitude,
-                        department_id
-                    )
-                    VALUES (
-                        $1,
-                        $2,
-                        'OPEN',
-                        50,
-                        $3,
-                        $4,
-                        $5
-                    )
-                    RETURNING id;
-                `;
-
-
-                const createIssueValues = [
-                    title,
-                    category,
-                    latitude,
-                    longitude,
-                    departmentId
-                ];
-
-
-                const newIssueResult = await pool.query(
-                    createIssueQuery,
-                    createIssueValues
-                );
-
-
-                civicIssueId =
-                    newIssueResult.rows[0].id;
-
-            }
-
-
-            // ------------------------------------------
-            // Create report
-            // user_id comes from JWT
-            // ------------------------------------------
-
-            const insertReportQuery = `
-                INSERT INTO reports (
-                    user_id,
-                    civic_issue_id,
-                    title,
-                    description,
-                    category,
-                    image
-                )
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING *;
-            `;
-
-
-            const insertReportValues = [
-                req.user.userId,
-                civicIssueId,
-                title,
-                description,
-                category,
-                image
-            ];
-
-
-            const reportResult = await pool.query(
-                insertReportQuery,
-                insertReportValues
-            );
-
+           const report = await createReport(
+    req.user.userId,
+    title,
+    description,
+    category,
+    latitude,
+    longitude,
+    image
+);
 
             return sendSuccess(
                 res,
                 201,
                 "Report created successfully",
-                reportResult.rows[0]
+                report
             );
 
         }
