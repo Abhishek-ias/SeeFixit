@@ -10,6 +10,10 @@ const validate = require("../middleware/validate");
 const validateId = require("../middleware/validateId");
 
 const {
+    updateIssueStatus
+} = require("../services/issueService");
+
+const {
     sendSuccess,
     sendError
 } = require("../utils/response");
@@ -498,14 +502,14 @@ router.get(
 // ADMIN ONLY
 // ======================================================
 
+
+
 router.patch(
     "/issues/:id/status",
     authenticateToken,
     requireRole("ADMIN"),
     validateId,
     async (req, res, next) => {
-
-        const client = await pool.connect();
 
         try {
 
@@ -516,209 +520,30 @@ router.patch(
             } = req.body;
 
 
-            const validStatuses = [
-                "OPEN",
-                "IN_PROGRESS",
-                "RESOLVED"
-            ];
-
-
-            if (!validStatuses.includes(status)) {
-
-                return sendError(
-                    res,
-                    400,
-                    "Invalid status"
-                );
-
-            }
-
-
-            const issueQuery = `
-                SELECT *
-                FROM civic_issues
-                WHERE id = $1;
-            `;
-
-
-            const issueResult = await client.query(
-                issueQuery,
-                [issueId]
+            const result = await updateIssueStatus(
+                issueId,
+                status,
+                req.user.userId
             );
-
-
-            if (issueResult.rows.length === 0) {
-
-                throw new AppError(
-                    "CivicIssue not found",
-                    404
-                );
-
-            }
-
-
-            const currentStatus =
-                issueResult.rows[0].status;
-
-
-            if (currentStatus === "OPEN") {
-
-                if (status !== "IN_PROGRESS") {
-
-                    return sendError(
-                        res,
-                        400,
-                        "OPEN issue can only move to IN_PROGRESS"
-                    );
-
-                }
-
-            }
-
-
-            else if (currentStatus === "IN_PROGRESS") {
-
-                if (status !== "RESOLVED") {
-
-                    return sendError(
-                        res,
-                        400,
-                        "IN_PROGRESS issue can only move to RESOLVED"
-                    );
-
-                }
-
-
-                const evidenceQuery = `
-                    SELECT id
-                    FROM issue_evidence
-                    WHERE civic_issue_id = $1
-                    LIMIT 1;
-                `;
-
-
-                const evidenceResult = await client.query(
-                    evidenceQuery,
-                    [issueId]
-                );
-
-
-                if (evidenceResult.rows.length === 0) {
-
-                    return sendError(
-                        res,
-                        400,
-                        "Cannot resolve issue without evidence"
-                    );
-
-                }
-
-            }
-
-
-            else if (currentStatus === "RESOLVED") {
-
-                return sendError(
-                    res,
-                    400,
-                    "Resolved issue cannot change status"
-                );
-
-            }
-
-
-            // ------------------------------------------
-            // Start transaction
-            // ------------------------------------------
-
-            await client.query("BEGIN");
-
-
-            const updateQuery = `
-                UPDATE civic_issues
-                SET status = $1
-                WHERE id = $2
-                RETURNING *;
-            `;
-
-
-            const updateResult = await client.query(
-                updateQuery,
-                [status, issueId]
-            );
-
-
-            const updatedIssue =
-                updateResult.rows[0];
-
-
-            const historyQuery = `
-                INSERT INTO issue_status_history (
-                    civic_issue_id,
-                    status,
-                    changed_by
-                )
-                VALUES ($1, $2, $3)
-                RETURNING *;
-            `;
-
-
-            const historyResult = await client.query(
-                historyQuery,
-                [
-                    issueId,
-                    status,
-                    req.user.userId
-                ]
-            );
-
-
-            await client.query("COMMIT");
 
 
             return sendSuccess(
                 res,
                 200,
                 "Issue status updated successfully",
-                {
-                    issue: updatedIssue,
-                    history: historyResult.rows[0]
-                }
+                result
             );
 
         }
 
         catch (error) {
 
-            try {
-
-                await client.query("ROLLBACK");
-
-            }
-
-            catch (rollbackError) {
-
-                console.error(
-                    "Rollback error:",
-                    rollbackError
-                );
-
-            }
-
-
             next(error);
-
-        }
-
-        finally {
-
-            client.release();
 
         }
 
     }
 );
-
 
 // ======================================================
 // STATUS HISTORY
