@@ -117,44 +117,16 @@ router.post(
             } = req.body;
 
 
-            // ------------------------------------------
-            // Decide department
-            // ------------------------------------------
+            const report = await createReport(
+                req.user.userId,
+                title,
+                description,
+                category,
+                latitude,
+                longitude,
+                image
+            );
 
-            let departmentId;
-
-            if (category === "ROAD") {
-
-                departmentId = 1;
-
-            } else if (category === "SANITATION") {
-
-                departmentId = 2;
-
-            } else if (category === "WATER") {
-
-                departmentId = 3;
-
-            } else {
-
-                return sendError(
-                    res,
-                    400,
-                    "Invalid category"
-                );
-
-            }
-
-
-           const report = await createReport(
-    req.user.userId,
-    title,
-    description,
-    category,
-    latitude,
-    longitude,
-    image
-);
 
             return sendSuccess(
                 res,
@@ -389,8 +361,6 @@ router.get(
 // ADMIN ONLY
 // ======================================================
 
-
-
 router.patch(
     "/issues/:id/status",
     authenticateToken,
@@ -432,6 +402,7 @@ router.patch(
     }
 );
 
+
 // ======================================================
 // STATUS HISTORY
 // ======================================================
@@ -454,7 +425,7 @@ router.get(
             const issueId = req.params.id;
 
 
-           const history = await getIssueHistory(issueId);
+            const history = await getIssueHistory(issueId);
 
 
             return sendSuccess(
@@ -629,36 +600,20 @@ router.get(
 
         try {
 
-           const reportId = req.params.id;
-
-const report = await getMyReportById(
-    reportId,
-    req.user.userId
-);
-
-return sendSuccess(
-    res,
-    200,
-    "Report fetched successfully",
-    report
-);
+            const reportId = req.params.id;
 
 
-            if (result.rows.length === 0) {
-
-                throw new AppError(
-                    "Report not found",
-                    404
-                );
-
-            }
+            const report = await getMyReportById(
+                reportId,
+                req.user.userId
+            );
 
 
             return sendSuccess(
                 res,
                 200,
                 "Report fetched successfully",
-                result.rows[0]
+                report
             );
 
         }
