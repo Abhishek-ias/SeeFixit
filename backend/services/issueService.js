@@ -332,10 +332,54 @@ async function getMyReports(userId) {
 
 
 
+
+async function getMyReportById(reportId, userId) {
+
+    const query = `
+        SELECT
+            reports.id AS report_id,
+            reports.user_id,
+            reports.civic_issue_id,
+            reports.title,
+            reports.description,
+            reports.category,
+            reports.image,
+            civic_issues.status AS issue_status,
+            civic_issues.priority_score
+        FROM reports
+        JOIN civic_issues
+            ON reports.civic_issue_id = civic_issues.id
+        WHERE reports.id = $1
+        AND reports.user_id = $2;
+    `;
+
+    const result = await pool.query(
+        query,
+        [
+            reportId,
+            userId
+        ]
+    );
+
+    if (result.rows.length === 0) {
+
+        throw new AppError(
+            "Report not found",
+            404
+        );
+
+    }
+
+    return result.rows[0];
+}
+
+
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
     uploadEvidence,
     getIssueEvidence,
-    getMyReports
+    getMyReports,
+    getMyReportById
 };
