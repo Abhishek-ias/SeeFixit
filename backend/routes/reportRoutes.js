@@ -13,7 +13,8 @@ const {
     updateIssueStatus,
     getIssueHistory,
     uploadEvidence,
-    getIssueEvidence
+    getIssueEvidence,
+    getMyReports
 } = require("../services/issueService");
 
 const {
@@ -706,27 +707,8 @@ router.get(
 
         try {
 
-            const query = `
-                SELECT
-                    reports.id AS report_id,
-                    reports.civic_issue_id,
-                    reports.title,
-                    reports.description,
-                    reports.category,
-                    reports.image,
-                    civic_issues.status AS issue_status,
-                    civic_issues.priority_score
-                FROM reports
-                JOIN civic_issues
-                    ON reports.civic_issue_id = civic_issues.id
-                WHERE reports.user_id = $1
-                ORDER BY reports.id DESC;
-            `;
-
-
-            const result = await pool.query(
-                query,
-                [req.user.userId]
+            const reports = await getMyReports(
+                req.user.userId
             );
 
 
@@ -734,7 +716,7 @@ router.get(
                 res,
                 200,
                 "Your reports fetched successfully",
-                result.rows
+                reports
             );
 
         }
