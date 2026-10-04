@@ -387,29 +387,22 @@ async function createReport(
     // Decide department
     // ------------------------------------------
 
-    let departmentId;
+    const departmentNames = {
+    ROAD: "Road Department",
+    SANITATION: "Sanitation Department",
+    WATER: "Water Department"
+};
 
-    if (category === "ROAD") {
+const departmentName = departmentNames[category];
 
-        departmentId = 1;
+if (!departmentName) {
 
-    } else if (category === "SANITATION") {
+    throw new AppError(
+        "Invalid category",
+        400
+    );
 
-        departmentId = 2;
-
-    } else if (category === "WATER") {
-
-        departmentId = 3;
-
-    } else {
-
-        throw new AppError(
-            "Invalid category",
-            400
-        );
-
-    }
-
+}
 
     const client = await pool.connect();
 
@@ -421,6 +414,33 @@ async function createReport(
         // ------------------------------------------
 
         await client.query("BEGIN");
+
+        // ------------------------------------------
+// Find department dynamically
+// ------------------------------------------
+
+const departmentQuery = `
+    SELECT id
+    FROM departments
+    WHERE name = $1;
+`;
+
+const departmentResult = await client.query(
+    departmentQuery,
+    [departmentName]
+);
+
+if (departmentResult.rows.length === 0) {
+
+    throw new AppError(
+        "Department not found",
+        500
+    );
+
+}
+
+const departmentId =
+    departmentResult.rows[0].id;
 
 
         // ------------------------------------------
