@@ -10,6 +10,11 @@ const validate = require("../middleware/validate");
 const validateId = require("../middleware/validateId");
 
 const {
+    updateIssueStatusSchema,
+    uploadEvidenceSchema
+} = require("../validation/issueValidation");
+
+const {
     updateIssueStatus,
     getIssueHistory,
     uploadEvidence,
@@ -252,6 +257,7 @@ router.patch(
     authenticateToken,
     requireRole("ADMIN"),
     validateId,
+    validate(updateIssueStatusSchema),
     async (req, res, next) => {
 
         try {
@@ -349,6 +355,7 @@ router.post(
     authenticateToken,
     requireRole("ADMIN"),
     validateId,
+    validate(uploadEvidenceSchema),
     async (req, res, next) => {
 
         try {
