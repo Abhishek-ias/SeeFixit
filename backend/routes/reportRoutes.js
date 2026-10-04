@@ -183,8 +183,13 @@ router.get(
 
         try {
 
-            const issues = await getAllIssues();
+            const page = req.query.page;
+            const limit = req.query.limit;
 
+            const issues = await getAllIssues(
+                page,
+                limit
+            );
 
             return sendSuccess(
                 res,

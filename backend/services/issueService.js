@@ -735,7 +735,33 @@ async function getIssueDetails(issueId) {
 // GET ALL ISSUES
 // ======================================================
 
-async function getAllIssues() {
+async function getAllIssues(page = 1, limit = 10) {
+
+    page = Number(page);
+    limit = Number(limit);
+
+    if (
+        !Number.isInteger(page) ||
+        page < 1
+    ) {
+        throw new AppError(
+            "Invalid page number",
+            400
+        );
+    }
+
+    if (
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 50
+    ) {
+        throw new AppError(
+            "Limit must be between 1 and 50",
+            400
+        );
+    }
+
+    const offset = (page - 1) * limit;
 
     const query = `
         SELECT
@@ -757,15 +783,39 @@ async function getAllIssues() {
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
-            departments.name;
+            departments.name
+        ORDER BY civic_issues.id
+        LIMIT $1
+        OFFSET $2;
     `;
 
+    const countQuery = `
+        SELECT COUNT(*) AS total
+        FROM civic_issues;
+    `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(
+        query,
+        [limit, offset]
+    );
 
+    const countResult = await pool.query(
+        countQuery
+    );
 
-    return result.rows;
+    const total = Number(
+        countResult.rows[0].total
+    );
 
+    return {
+        issues: result.rows,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        }
+    };
 }
 
 module.exports = {
