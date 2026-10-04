@@ -70,16 +70,34 @@ async function registerUser(name, email, password) {
     ];
 
 
+    try {
+
     const result = await pool.query(
         insertQuery,
         values
     );
 
-
     return result.rows[0];
+
+}
+catch (error) {
+
+    if (
+        error.code === "23505" &&
+        error.constraint === "users_email_unique"
+    ) {
+
+        throw new AppError(
+            "Email already registered",
+            409
+        );
+
+    }
+
+    throw error;
 }
 
-
+}
 // ======================================================
 // LOGIN USER
 // ======================================================
