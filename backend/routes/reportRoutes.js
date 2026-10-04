@@ -17,7 +17,8 @@ const {
     getMyReports,
     getMyReportById,
     createReport,
-    getIssueDetails
+    getIssueDetails,
+    getAllIssues
 } = require("../services/issueService");
 
 const {
@@ -152,7 +153,6 @@ router.post(
 // CIVIC ISSUES
 // ======================================================
 
-
 // ======================================================
 // GET /api/issues
 // Get all CivicIssues
@@ -178,38 +178,14 @@ router.get(
 
         try {
 
-            const query = `
-                SELECT
-                    civic_issues.id AS issue_id,
-                    civic_issues.title AS issue_title,
-                    civic_issues.category,
-                    civic_issues.status,
-                    civic_issues.priority_score,
-                    departments.name AS department_name,
-                    COUNT(reports.id) AS report_count
-                FROM civic_issues
-                JOIN departments
-                    ON civic_issues.department_id = departments.id
-                LEFT JOIN reports
-                    ON civic_issues.id = reports.civic_issue_id
-                GROUP BY
-                    civic_issues.id,
-                    civic_issues.title,
-                    civic_issues.category,
-                    civic_issues.status,
-                    civic_issues.priority_score,
-                    departments.name;
-            `;
-
-
-            const result = await pool.query(query);
+            const issues = await getAllIssues();
 
 
             return sendSuccess(
                 res,
                 200,
                 "Issues fetched successfully",
-                result.rows
+                issues
             );
 
         }
