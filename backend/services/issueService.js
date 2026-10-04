@@ -245,6 +245,24 @@ async function uploadEvidence(
     description
 ) {
 
+    const issueQuery = `
+        SELECT id
+        FROM civic_issues
+        WHERE id = $1;
+    `;
+
+    const issueResult = await pool.query(
+        issueQuery,
+        [civicIssueId]
+    );
+
+    if (issueResult.rows.length === 0) {
+        throw new AppError(
+            "CivicIssue not found",
+            404
+        );
+    }
+
     const query = `
         INSERT INTO issue_evidence (
             civic_issue_id,
