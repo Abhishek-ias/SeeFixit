@@ -11,7 +11,8 @@ const validateId = require("../middleware/validateId");
 
 const {
     updateIssueStatusSchema,
-    uploadEvidenceSchema
+    uploadEvidenceSchema,
+     issueFilterSchema
 } = require("../validation/issueValidation");
 
 const {
@@ -179,6 +180,7 @@ router.post(
 
 router.get(
     "/issues",
+    validate(issueFilterSchema, "query"),
     async (req, res, next) => {
 
         try {
@@ -186,10 +188,15 @@ router.get(
             const page = req.query.page;
             const limit = req.query.limit;
 
-            const issues = await getAllIssues(
-                page,
-                limit
-            );
+            const category = req.query.category;
+const status = req.query.status;
+
+const issues = await getAllIssues(
+    page,
+    limit,
+    category,
+    status
+);
 
             return sendSuccess(
                 res,

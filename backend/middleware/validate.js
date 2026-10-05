@@ -1,14 +1,13 @@
-function validate(schema) {
+function validate(schema, source = "body") {
 
     return (req, res, next) => {
 
         const { error } = schema.validate(
-            req.body,
+            req[source],
             {
                 abortEarly: false
             }
         );
-
 
         if (error) {
 
@@ -21,12 +20,10 @@ function validate(schema) {
 
         }
 
-
         next();
 
     };
 
 }
-
 
 module.exports = validate;

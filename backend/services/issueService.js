@@ -735,7 +735,12 @@ async function getIssueDetails(issueId) {
 // GET ALL ISSUES
 // ======================================================
 
-async function getAllIssues(page = 1, limit = 10) {
+async function getAllIssues(
+    page = 1,
+    limit = 10,
+    category,
+    status
+) {
 
     page = Number(page);
     limit = Number(limit);
@@ -763,6 +768,43 @@ async function getAllIssues(page = 1, limit = 10) {
 
     const offset = (page - 1) * limit;
 
+    const conditions = [];
+    const filterValues = [];
+
+    if (category) {
+
+        filterValues.push(category);
+
+        conditions.push(
+            `civic_issues.category = $${filterValues.length}`
+        );
+
+    }
+
+    if (status) {
+
+        filterValues.push(status);
+
+        conditions.push(
+            `civic_issues.status = $${filterValues.length}`
+        );
+
+    }
+
+    const whereClause =
+        conditions.length > 0
+            ? `WHERE ${conditions.join(" AND ")}`
+            : "";
+
+    const limitParameter = filterValues.length + 1;
+    const offsetParameter = filterValues.length + 2;
+
+    const queryValues = [
+        ...filterValues,
+        limit,
+        offset
+    ];
+
     const query = `
         SELECT
             civic_issues.id AS issue_id,
@@ -777,6 +819,7 @@ async function getAllIssues(page = 1, limit = 10) {
             ON civic_issues.department_id = departments.id
         LEFT JOIN reports
             ON civic_issues.id = reports.civic_issue_id
+        ${whereClause}
         GROUP BY
             civic_issues.id,
             civic_issues.title,
@@ -785,22 +828,24 @@ async function getAllIssues(page = 1, limit = 10) {
             civic_issues.priority_score,
             departments.name
         ORDER BY civic_issues.id
-        LIMIT $1
-        OFFSET $2;
+        LIMIT $${limitParameter}
+        OFFSET $${offsetParameter};
     `;
 
     const countQuery = `
         SELECT COUNT(*) AS total
-        FROM civic_issues;
+        FROM civic_issues
+        ${whereClause};
     `;
 
     const result = await pool.query(
         query,
-        [limit, offset]
+        queryValues
     );
 
     const countResult = await pool.query(
-        countQuery
+        countQuery,
+        filterValues
     );
 
     const total = Number(
