@@ -37,6 +37,14 @@ const issueFilterSchema = Joi.object({
         .integer()
         .min(1)
         .max(50)
+        .optional(),
+
+    sortBy: Joi.string()
+        .valid("id", "priority_score", "report_count")
+        .optional(),
+
+    order: Joi.string()
+        .valid("asc", "desc")
         .optional()
 }).unknown(false);
 

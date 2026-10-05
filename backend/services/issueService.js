@@ -739,7 +739,9 @@ async function getAllIssues(
     page = 1,
     limit = 10,
     category,
-    status
+    status,
+    sortBy,
+    order
 ) {
 
     page = Number(page);
@@ -767,6 +769,18 @@ async function getAllIssues(
     }
 
     const offset = (page - 1) * limit;
+
+    const sortColumns = {
+    id: "civic_issues.id",
+    priority_score: "civic_issues.priority_score",
+    report_count: "COUNT(reports.id)"
+};
+
+const sortColumn =
+    sortColumns[sortBy] || "civic_issues.id";
+
+const sortOrder =
+    order === "desc" ? "DESC" : "ASC";
 
     const conditions = [];
     const filterValues = [];
@@ -827,7 +841,7 @@ async function getAllIssues(
             civic_issues.status,
             civic_issues.priority_score,
             departments.name
-        ORDER BY civic_issues.id
+        ORDER BY ${sortColumn} ${sortOrder}
         LIMIT $${limitParameter}
         OFFSET $${offsetParameter};
     `;

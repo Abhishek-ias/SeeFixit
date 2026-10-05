@@ -185,17 +185,22 @@ router.get(
 
         try {
 
-            const page = req.query.page;
-            const limit = req.query.limit;
+           const page = req.query.page;
+const limit = req.query.limit;
 
-            const category = req.query.category;
+const category = req.query.category;
 const status = req.query.status;
+
+const sortBy = req.query.sortBy;
+const order = req.query.order;
 
 const issues = await getAllIssues(
     page,
     limit,
     category,
-    status
+    status,
+    sortBy,
+    order
 );
 
             return sendSuccess(
