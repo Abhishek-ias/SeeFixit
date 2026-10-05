@@ -187,6 +187,7 @@ router.get(
 
            const page = req.query.page;
 const limit = req.query.limit;
+const search = req.query.search;
 
 const category = req.query.category;
 const status = req.query.status;
@@ -194,9 +195,12 @@ const status = req.query.status;
 const sortBy = req.query.sortBy;
 const order = req.query.order;
 
+
+
 const issues = await getAllIssues(
     page,
     limit,
+    search,
     category,
     status,
     sortBy,

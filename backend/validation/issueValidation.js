@@ -20,6 +20,12 @@ const uploadEvidenceSchema = Joi.object({
 }).unknown(false);
 
 const issueFilterSchema = Joi.object({
+    search: Joi.string()
+        .trim()
+        .min(1)
+        .max(100)
+        .optional(),
+
     category: Joi.string()
         .valid("ROAD", "SANITATION", "WATER")
         .optional(),

@@ -738,6 +738,7 @@ async function getIssueDetails(issueId) {
 async function getAllIssues(
     page = 1,
     limit = 10,
+    search,
     category,
     status,
     sortBy,
@@ -784,6 +785,16 @@ const sortOrder =
 
     const conditions = [];
     const filterValues = [];
+
+    if (search) {
+
+    filterValues.push(`%${search}%`);
+
+    conditions.push(
+        `civic_issues.title ILIKE $${filterValues.length}`
+    );
+
+}
 
     if (category) {
 
