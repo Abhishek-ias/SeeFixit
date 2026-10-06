@@ -852,7 +852,7 @@ const sortOrder =
             civic_issues.status,
             civic_issues.priority_score,
             departments.name
-        ORDER BY ${sortColumn} ${sortOrder}
+        ORDER BY ${sortColumn} ${sortOrder}, civic_issues.id ASC
         LIMIT $${limitParameter}
         OFFSET $${offsetParameter};
     `;
