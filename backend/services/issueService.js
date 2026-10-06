@@ -874,18 +874,24 @@ const sortOrder =
     );
 
     const total = Number(
-        countResult.rows[0].total
-    );
+    countResult.rows[0].total
+);
 
-    return {
-        issues: result.rows,
-        pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit)
-        }
-    };
+const issues = result.rows.map(issue => ({
+    ...issue,
+    report_count: Number(issue.report_count)
+}));
+
+return {
+    issues,
+    pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+    }
+};
+
 }
 
 module.exports = {
@@ -896,6 +902,5 @@ module.exports = {
     getMyReports,
     getMyReportById,
     createReport,
-    getIssueDetails,
     getAllIssues
 };
