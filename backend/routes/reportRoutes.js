@@ -169,13 +169,95 @@ router.post(
  * @swagger
  * /api/issues:
  *   get:
- *     summary: Get all civic issues
- *     description: Returns a list of all CivicIssues.
+ *     summary: Get civic issues
+ *     description: Returns civic issues with optional search, filtering, sorting, and pagination.
  *     tags:
  *       - Issues
+ *
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         required: false
+ *         description: Search issues by title.
+ *         schema:
+ *           type: string
+ *           minLength: 1
+ *           maxLength: 100
+ *         example: street
+ *
+ *       - in: query
+ *         name: category
+ *         required: false
+ *         description: Filter issues by category.
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - ROAD
+ *             - SANITATION
+ *             - WATER
+ *         example: ROAD
+ *
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         description: Filter issues by status.
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - OPEN
+ *             - IN_PROGRESS
+ *             - RESOLVED
+ *         example: IN_PROGRESS
+ *
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         description: Page number.
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         example: 1
+ *
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Number of issues per page. Maximum 50.
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         example: 10
+ *
+ *       - in: query
+ *         name: sortBy
+ *         required: false
+ *         description: Field used to sort the issues.
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - id
+ *             - priority_score
+ *             - report_count
+ *         example: report_count
+ *
+ *       - in: query
+ *         name: order
+ *         required: false
+ *         description: Sort direction.
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - asc
+ *             - desc
+ *         example: desc
+ *
  *     responses:
  *       200:
  *         description: Issues fetched successfully
+ *       400:
+ *         description: Invalid query parameters
  */
 
 router.get(
