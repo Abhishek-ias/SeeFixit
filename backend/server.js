@@ -12,6 +12,8 @@ const swaggerUi = require("swagger-ui-express");
 
 const swaggerSpec = require("./config/swagger");
 
+const config = require("./config/config");
+
 
 // ======================================================
 // Middleware
@@ -84,7 +86,7 @@ app.use(
 
 
 
-const port = process.env.PORT || 5000;
+const port = config.server.port;
 
 const server = app.listen(port, () => {
 
