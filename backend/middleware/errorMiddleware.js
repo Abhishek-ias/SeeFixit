@@ -2,6 +2,8 @@ const {
     sendError
 } = require("../utils/response");
 
+const logger = require("../utils/logger");
+
 
 function errorHandler(err, req, res, next) {
 

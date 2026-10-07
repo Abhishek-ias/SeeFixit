@@ -14,6 +14,7 @@ const swaggerSpec = require("./config/swagger");
 
 const config = require("./config/config");
 
+const logger = require("./utils/logger");
 
 // ======================================================
 // Middleware
@@ -90,24 +91,28 @@ const port = config.server.port;
 
 const server = app.listen(port, () => {
 
-    console.log(`SeeFixit server running on port ${port}`);
+    logger.info("SeeFixit server started", {
+    port
+});
 
 });
 
 
 async function gracefulShutdown(signal) {
 
-    console.log(`\n${signal} received. Shutting down gracefully...`);
+    logger.info("Graceful shutdown started", {
+    signal
+});
 
     server.close(async () => {
 
-        console.log("HTTP server closed.");
+        logger.info("HTTP server closed");
 
         try {
 
             await pool.end();
 
-            console.log("Database pool closed.");
+            logger.info("Database pool closed");
 
             process.exit(0);
 
@@ -115,14 +120,13 @@ async function gracefulShutdown(signal) {
 
         catch (error) {
 
-            console.error(
-                "Error closing database pool:",
-                error
-            );
+    logger.error("Error closing database pool", {
+        error: error.message
+    });
 
-            process.exit(1);
+    process.exit(1);
 
-        }
+}
 
     });
 
