@@ -2,7 +2,13 @@ const express = require("express");
 
 const router = express.Router();
 
+const authLimiter = require("../middleware/authRateLimiter");
+
+router.use(authLimiter);
+
 const validate = require("../middleware/validate");
+
+
 
 const {
     registerSchema,
