@@ -16,12 +16,14 @@ const config = require("./config/config");
 
 const logger = require("./utils/logger");
 
+const requestLogger = require("./middleware/requestLogger");
+
 // ======================================================
 // Middleware
 // ======================================================
 
 app.use(express.json());
-
+app.use(requestLogger);
 
 // ======================================================
 // Rate Limiting
