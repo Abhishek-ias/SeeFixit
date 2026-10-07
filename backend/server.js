@@ -3,6 +3,8 @@ require("dotenv").config();
 
 const express = require("express");
 
+const pool = require("./db/database");
+
 const app = express();
 
 
@@ -80,10 +82,60 @@ app.use(
 // Start Server
 // ======================================================
 
+
+
 const port = 5000;
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
 
     console.log(`SeeFixit server running on port ${port}`);
+
+});
+
+
+async function gracefulShutdown(signal) {
+
+    console.log(`\n${signal} received. Shutting down gracefully...`);
+
+    server.close(async () => {
+
+        console.log("HTTP server closed.");
+
+        try {
+
+            await pool.end();
+
+            console.log("Database pool closed.");
+
+            process.exit(0);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Error closing database pool:",
+                error
+            );
+
+            process.exit(1);
+
+        }
+
+    });
+
+}
+
+
+process.on("SIGINT", () => {
+
+    gracefulShutdown("SIGINT");
+
+});
+
+
+process.on("SIGTERM", () => {
+
+    gracefulShutdown("SIGTERM");
 
 });
