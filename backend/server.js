@@ -103,6 +103,22 @@ app.get(
 );
 
 
+
+// ======================================================
+// Liveness Check
+// ======================================================
+
+app.get("/api/health/live", (req, res) => {
+    return res.status(200).json({
+        success: true,
+        message: "SeeFixit process is alive",
+        data: {
+            status: "alive"
+        }
+    });
+});
+
+
 // ======================================================
 // Error Handling Middleware
 // ======================================================
