@@ -139,16 +139,11 @@ app.use(
 
 
 
+
+
 const port = config.server.port;
 
-const server = app.listen(port, () => {
-
-    logger.info("SeeFixit server started", {
-    port
-});
-
-});
-
+let server;
 let isShuttingDown = false;
 let forceShutdownStarted = false;
 
@@ -191,15 +186,21 @@ async function gracefulShutdown(signal) {
         }
     });
 }
-process.on("SIGINT", () => {
 
-    gracefulShutdown("SIGINT");
+if (require.main === module) {
+    server = app.listen(port, () => {
+        logger.info("SeeFixit server started", {
+            port
+        });
+    });
 
-});
+    process.on("SIGINT", () => {
+        gracefulShutdown("SIGINT");
+    });
 
+    process.on("SIGTERM", () => {
+        gracefulShutdown("SIGTERM");
+    });
+}
 
-process.on("SIGTERM", () => {
-
-    gracefulShutdown("SIGTERM");
-
-});
+module.exports = app;
