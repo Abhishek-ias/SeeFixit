@@ -65,42 +65,40 @@ app.get(
 );
 
 
-app.get(
-    "/api/health",
-    async (req, res) => {
 
-        try {
 
-            await pool.query("SELECT 1");
+// ======================================================
+// Readiness Check
+// ======================================================
 
-            return res.status(200).json({
-                success: true,
-                message: "SeeFixit is healthy",
-                data: {
-                    status: "ok",
-                    database: "connected"
-                }
-            });
+async function readinessHandler(req, res) {
+    try {
+        await pool.query("SELECT 1");
 
-        }
+        return res.status(200).json({
+            success: true,
+            message: "SeeFixit is healthy",
+            data: {
+                status: "ok",
+                database: "connected"
+            }
+        });
+    } catch (error) {
+        logger.error("Health check failed", {
+            requestId: req.requestId,
+            error: error.message
+        });
 
-        catch (error) {
-
-            logger.error("Health check failed", {
-                requestId: req.requestId,
-                error: error.message
-            });
-
-            return res.status(503).json({
-                success: false,
-                message: "SeeFixit is unhealthy",
-                error: "Database unavailable"
-            });
-
-        }
-
+        return res.status(503).json({
+            success: false,
+            message: "SeeFixit is unhealthy",
+            error: "Database unavailable"
+        });
     }
-);
+}
+
+app.get("/api/health", readinessHandler);
+app.get("/api/health/ready", readinessHandler);
 
 
 
@@ -151,42 +149,48 @@ const server = app.listen(port, () => {
 
 });
 
+let isShuttingDown = false;
+let forceShutdownStarted = false;
 
 async function gracefulShutdown(signal) {
+    if (isShuttingDown) {
+        if (!forceShutdownStarted) {
+            forceShutdownStarted = true;
+
+            logger.warn("Force-closing active HTTP connections", {
+                signal
+            });
+
+            server.closeAllConnections();
+        }
+
+        return;
+    }
+
+    isShuttingDown = true;
 
     logger.info("Graceful shutdown started", {
-    signal
-});
+        signal
+    });
 
     server.close(async () => {
-
         logger.info("HTTP server closed");
 
         try {
-
             await pool.end();
 
             logger.info("Database pool closed");
 
             process.exit(0);
+        } catch (error) {
+            logger.error("Error closing database pool", {
+                error: error.message
+            });
 
+            process.exit(1);
         }
-
-        catch (error) {
-
-    logger.error("Error closing database pool", {
-        error: error.message
     });
-
-    process.exit(1);
-
 }
-
-    });
-
-}
-
-
 process.on("SIGINT", () => {
 
     gracefulShutdown("SIGINT");
