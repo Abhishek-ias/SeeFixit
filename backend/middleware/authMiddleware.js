@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 
+const config = require("../config/config");
+
 const {
     sendError
 } = require("../utils/response");
@@ -63,7 +65,7 @@ function authenticateToken(req, res, next) {
 
         const decoded = jwt.verify(
             token,
-            process.env.JWT_SECRET
+            config.auth.jwtSecret
         );
 
 

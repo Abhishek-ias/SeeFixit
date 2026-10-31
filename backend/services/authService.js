@@ -5,6 +5,8 @@ const pool = require("../db/database");
 
 const AppError = require("../utils/AppError");
 
+const config = require("../config/config");
+
 
 // ======================================================
 // REGISTER USER
@@ -166,7 +168,7 @@ async function loginUser(email, password) {
             userId: user.id,
             role: user.role
         },
-        process.env.JWT_SECRET,
+        config.auth.jwtSecret,
         {
             expiresIn: "1h"
         }
