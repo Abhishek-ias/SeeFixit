@@ -6,19 +6,24 @@ const logger = require("../utils/logger");
 
 function errorHandler(err, req, res, next) {
 
+    const statusCode = err.statusCode || err.status || 500;
+
     logger.error("Application error", {
         requestId: req.requestId,
-        statusCode: err.statusCode || 500,
+        statusCode,
         message: err.message,
         stack: err.stack
     });
 
-    const statusCode = err.statusCode || 500;
+    let message;
 
-    const message =
-        statusCode === 500
-            ? "Internal server error"
-            : err.message || "Something went wrong";
+    if (statusCode === 500) {
+        message = "Internal server error";
+    } else if (statusCode === 413) {
+        message = "Request body too large";
+    } else {
+        message = err.message || "Something went wrong";
+    }
 
     return sendError(
         res,

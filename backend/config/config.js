@@ -28,7 +28,9 @@ function getPort(name, defaultValue = null) {
 
 const config = {
     server: {
-        port: getPort("PORT", 5000)
+        port: getPort("PORT", 5000),
+        frontendOrigin:
+            process.env.FRONTEND_ORIGIN || "http://localhost:5173"
     },
 
     db: {

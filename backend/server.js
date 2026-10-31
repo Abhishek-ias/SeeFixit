@@ -3,9 +3,16 @@ require("dotenv").config();
 
 const express = require("express");
 
+
+
+const helmet = require("helmet");
+const cors = require("cors");
+
 const pool = require("./db/database");
 
 const app = express();
+
+app.disable("x-powered-by");
 
 
 const swaggerUi = require("swagger-ui-express");
@@ -19,10 +26,67 @@ const logger = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
 
 // ======================================================
+// Security Middleware
+// ======================================================
+
+const apiHelmet = helmet();
+
+// Swagger UI needs a separate CSP configuration
+// because its inline scripts may be blocked by the default CSP.
+const docsHelmet = helmet({
+    contentSecurityPolicy: false
+});
+
+app.use((req, res, next) => {
+    const isSwaggerDocs =
+        req.path === "/api-docs" ||
+        req.path.startsWith("/api-docs/");
+
+    const selectedHelmet = isSwaggerDocs
+        ? docsHelmet
+        : apiHelmet;
+
+    selectedHelmet(req, res, next);
+});
+
+// ======================================================
+// CORS Configuration
+// ======================================================
+
+app.use(cors({
+    origin: (origin, callback) => {
+
+        if (!origin || origin === config.server.frontendOrigin) {
+            return callback(null, true);
+        }
+
+        return callback(null, false);
+    },
+
+    methods: [
+        "GET",
+        "HEAD",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"
+    ],
+
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization"
+    ]
+}));
+
+// ======================================================
 // Middleware
 // ======================================================
 
-app.use(express.json());
+app.use(express.json({
+    limit: "10kb"
+}));
+
 app.use(requestLogger);
 
 // ======================================================
