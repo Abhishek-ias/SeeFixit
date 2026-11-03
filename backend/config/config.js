@@ -12,6 +12,28 @@ function getRequiredEnv(name) {
     return value.trim();
 }
 
+function getBooleanEnv(name, defaultValue = false) {
+    const value = process.env[name];
+
+    if (value === undefined) {
+        return defaultValue;
+    }
+
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized === "true") {
+        return true;
+    }
+
+    if (normalized === "false") {
+        return false;
+    }
+
+    throw new Error(
+        `Invalid ${name}: must be true or false`
+    );
+}
+
 function getPort(name, defaultValue = null) {
     const value = process.env[name];
 
@@ -50,6 +72,17 @@ if (!allowedEnvironments.includes(nodeEnv)) {
 }
 
 const isProduction = nodeEnv === "production";
+
+const dbSslEnabled = getBooleanEnv(
+    "DB_SSL",
+    isProduction
+);
+
+if (isProduction && !dbSslEnabled) {
+    throw new Error(
+        "DB_SSL must be true in production"
+    );
+}
 
 const jwtSecret = getRequiredEnv("JWT_SECRET");
 
@@ -109,15 +142,17 @@ const config = {
         frontendOrigin
     },
     auth: {
-     jwtSecret
+        jwtSecret
     },
-
     db: {
         user: getRequiredEnv("DB_USER"),
         host: getRequiredEnv("DB_HOST"),
         database: getRequiredEnv("DB_NAME"),
         password: getRequiredEnv("DB_PASSWORD"),
-        port: getPort("DB_PORT")
+        port: getPort("DB_PORT"),
+        ssl: dbSslEnabled
+            ? { rejectUnauthorized: true }
+            : false
     }
 
 };

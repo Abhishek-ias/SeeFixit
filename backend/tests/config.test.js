@@ -24,6 +24,7 @@ after(() => {
     });
 });
 
+// Run config.js in a separate Node.js process.
 function runConfig(overrides = {}, removeVariables = []) {
 
     const env = {
@@ -41,6 +42,7 @@ function runConfig(overrides = {}, removeVariables = []) {
         ...overrides
     };
 
+    // Remove selected environment variables.
     for (const variable of removeVariables) {
         delete env[variable];
     }
@@ -53,7 +55,10 @@ function runConfig(overrides = {}, removeVariables = []) {
             production: config.server.isProduction,
             port: config.server.port,
             frontendOrigin: config.server.frontendOrigin,
-            jwtConfigured: Boolean(config.auth.jwtSecret)
+            jwtConfigured: Boolean(config.auth.jwtSecret),
+            dbSsl: config.db.ssl === false
+                ? false
+                : config.db.ssl.rejectUnauthorized
         }));
     `;
 
@@ -68,7 +73,7 @@ function runConfig(overrides = {}, removeVariables = []) {
     );
 }
 
-
+// Parse the configuration returned by the child process.
 function parseConfigOutput(result) {
     const lines = result.stdout
         .trim()
@@ -77,30 +82,39 @@ function parseConfigOutput(result) {
     return JSON.parse(lines.at(-1));
 }
 
-// 1. Development defaults
+
+// ======================================================
+// 1. Development Defaults
+// ======================================================
 
 test("development configuration uses local defaults", () => {
 
     const result = runConfig(
         {},
-        ["NODE_ENV", "FRONTEND_ORIGIN"]
+        ["NODE_ENV", "FRONTEND_ORIGIN", "DB_SSL"]
     );
 
     assert.equal(result.status, 0, result.stderr);
+
     const config = parseConfigOutput(result);
 
     assert.equal(config.environment, "development");
     assert.equal(config.production, false);
     assert.equal(config.port, 5000);
+
     assert.equal(
         config.frontendOrigin,
         "http://localhost:5173"
     );
+
     assert.equal(config.jwtConfigured, true);
+    assert.equal(config.dbSsl, false);
 });
 
 
-// 2. Reject unsupported environment
+// ======================================================
+// 2. Reject Unsupported Environment
+// ======================================================
 
 test("configuration rejects unsupported NODE_ENV", () => {
 
@@ -117,7 +131,9 @@ test("configuration rejects unsupported NODE_ENV", () => {
 });
 
 
-// 3. Production requires frontend origin
+// ======================================================
+// 3. Production Requires Frontend Origin
+// ======================================================
 
 test("production requires FRONTEND_ORIGIN", () => {
 
@@ -137,7 +153,9 @@ test("production requires FRONTEND_ORIGIN", () => {
 });
 
 
-// 4. Production requires HTTPS
+// ======================================================
+// 4. Production Requires HTTPS
+// ======================================================
 
 test("production rejects HTTP frontend origins", () => {
 
@@ -155,7 +173,9 @@ test("production rejects HTTP frontend origins", () => {
 });
 
 
-// 5. Production requires a strong JWT secret
+// ======================================================
+// 5. Production Requires Strong JWT Secret
+// ======================================================
 
 test("production rejects JWT secrets shorter than 32 characters", () => {
 
@@ -174,7 +194,9 @@ test("production rejects JWT secrets shorter than 32 characters", () => {
 });
 
 
-// 6. Missing JWT secret is rejected
+// ======================================================
+// 6. Missing JWT Secret Is Rejected
+// ======================================================
 
 test("configuration rejects a missing JWT secret", () => {
 
@@ -192,15 +214,20 @@ test("configuration rejects a missing JWT secret", () => {
 });
 
 
-// 7. Valid production configuration
+// ======================================================
+// 7. Valid Production Configuration
+// ======================================================
 
 test("production configuration accepts valid settings", () => {
 
-    const result = runConfig({
-        NODE_ENV: "production",
-        FRONTEND_ORIGIN: "https://seefixit.example.com",
-        JWT_SECRET: "production-secret-with-more-than-32-characters"
-    });
+    const result = runConfig(
+        {
+            NODE_ENV: "production",
+            FRONTEND_ORIGIN: "https://seefixit.example.com",
+            JWT_SECRET: "production-secret-with-more-than-32-characters"
+        },
+        ["DB_SSL"]
+    );
 
     assert.equal(result.status, 0, result.stderr);
 
@@ -208,9 +235,95 @@ test("production configuration accepts valid settings", () => {
 
     assert.equal(config.environment, "production");
     assert.equal(config.production, true);
+
     assert.equal(
         config.frontendOrigin,
         "https://seefixit.example.com"
     );
+
     assert.equal(config.jwtConfigured, true);
+    assert.equal(config.dbSsl, true);
+});
+
+
+// ======================================================
+// 8. Development Can Enable SSL Explicitly
+// ======================================================
+
+test("development can explicitly enable database SSL", () => {
+
+    const result = runConfig({
+        NODE_ENV: "development",
+        DB_SSL: "true"
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = parseConfigOutput(result);
+
+    assert.equal(config.dbSsl, true);
+});
+
+
+// ======================================================
+// 9. Invalid DB_SSL Values Are Rejected
+// ======================================================
+
+test("configuration rejects invalid DB_SSL values", () => {
+
+    const result = runConfig({
+        DB_SSL: "yes"
+    });
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /Invalid DB_SSL/
+    );
+});
+
+
+// ======================================================
+// 10. Production Enables SSL By Default
+// ======================================================
+
+test("production enables database SSL by default", () => {
+
+    const result = runConfig(
+        {
+            NODE_ENV: "production",
+            FRONTEND_ORIGIN: "https://seefixit.example.com",
+            JWT_SECRET: "production-secret-with-more-than-32-characters"
+        },
+        ["DB_SSL"]
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = parseConfigOutput(result);
+
+    assert.equal(config.dbSsl, true);
+});
+
+
+// ======================================================
+// 11. Production Cannot Disable SSL
+// ======================================================
+
+test("production rejects disabled database SSL", () => {
+
+    const result = runConfig({
+    NODE_ENV: "production",
+    FRONTEND_ORIGIN: "https://seefixit.example.com",
+    JWT_SECRET: "production-secret-with-more-than-32-characters",
+    DB_SSL: "false"
+});
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /DB_SSL must be true in production/
+    );
 });
