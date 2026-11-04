@@ -1,7 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const pool = require("../db/database");
+const { Pool } = require("pg");
+const config = require("../config/config");
+
+const pool = new Pool(config.dbMigration);
 
 async function runMigrations() {
     const client = await pool.connect();

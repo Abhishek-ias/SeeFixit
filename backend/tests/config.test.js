@@ -51,15 +51,36 @@ function runConfig(overrides = {}, removeVariables = []) {
         const config = require(${JSON.stringify(configPath)});
 
         console.log(JSON.stringify({
-            environment: config.server.environment,
-            production: config.server.isProduction,
-            port: config.server.port,
-            frontendOrigin: config.server.frontendOrigin,
-            jwtConfigured: Boolean(config.auth.jwtSecret),
-            dbSsl: config.db.ssl === false
-                ? false
-                : config.db.ssl.rejectUnauthorized
-        }));
+    environment: config.server.environment,
+    production: config.server.isProduction,
+    port: config.server.port,
+    frontendOrigin: config.server.frontendOrigin,
+    jwtConfigured: Boolean(config.auth.jwtSecret),
+
+    dbConnection: config.db.connectionString
+        ? "neon"
+        : "local",
+
+    dbApplicationHost: config.db.connectionString
+        ? new URL(config.db.connectionString).hostname
+        : config.db.host,
+
+    dbMigrationHost: config.dbMigration.connectionString
+        ? new URL(config.dbMigration.connectionString).hostname
+        : config.dbMigration.host,
+
+    dbApplicationSslMode: config.db.connectionString
+        ? new URL(config.db.connectionString).searchParams.get("sslmode")
+        : null,
+
+    dbMigrationSslMode: config.dbMigration.connectionString
+        ? new URL(config.dbMigration.connectionString).searchParams.get("sslmode")
+        : null,
+
+    dbSsl: config.db.ssl === false
+        ? false
+        : config.db.ssl?.rejectUnauthorized ?? null
+}));
     `;
 
     return spawnSync(
@@ -325,5 +346,126 @@ test("production rejects disabled database SSL", () => {
     assert.match(
         result.stderr,
         /DB_SSL must be true in production/
+    );
+});
+
+
+
+
+const testPooledUrl =
+    "postgresql://test-user:test-password@ep-example-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full";
+
+const testDirectUrl =
+    "postgresql://test-user:test-password@ep-example.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full";
+
+test("Neon mode selects pooled and direct connections correctly", () => {
+    const result = runConfig(
+        {
+            DB_CONNECTION: "neon",
+            DATABASE_URL: testPooledUrl,
+            DIRECT_DATABASE_URL: testDirectUrl
+        },
+        [
+            "DB_USER",
+            "DB_HOST",
+            "DB_NAME",
+            "DB_PASSWORD",
+            "DB_PORT"
+        ]
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = parseConfigOutput(result);
+
+    assert.equal(config.dbConnection, "neon");
+    assert.match(config.dbApplicationHost, /-pooler/);
+    assert.doesNotMatch(config.dbMigrationHost, /-pooler/);
+
+    assert.equal(config.dbApplicationSslMode, "verify-full");
+    assert.equal(config.dbMigrationSslMode, "verify-full");
+});
+
+test("Neon configuration rejects a missing DATABASE_URL", () => {
+    const result = runConfig(
+        {
+            DB_CONNECTION: "neon",
+            DIRECT_DATABASE_URL: testDirectUrl
+        },
+        [
+            "DATABASE_URL",
+            "DB_USER",
+            "DB_HOST",
+            "DB_NAME",
+            "DB_PASSWORD",
+            "DB_PORT"
+        ]
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /DATABASE_URL/);
+});
+
+test("Neon configuration rejects a missing DIRECT_DATABASE_URL", () => {
+    const result = runConfig(
+        {
+            DB_CONNECTION: "neon",
+            DATABASE_URL: testPooledUrl
+        },
+        [
+            "DIRECT_DATABASE_URL",
+            "DB_USER",
+            "DB_HOST",
+            "DB_NAME",
+            "DB_PASSWORD",
+            "DB_PORT"
+        ]
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /DIRECT_DATABASE_URL/);
+});
+
+test("Neon configuration rejects non-PostgreSQL URLs", () => {
+    const result = runConfig({
+        DB_CONNECTION: "neon",
+        DATABASE_URL: "https://example.com/database",
+        DIRECT_DATABASE_URL: testDirectUrl
+    });
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /must use PostgreSQL protocol/
+    );
+});
+
+test("Neon configuration rejects SSL modes weaker than verify-full", () => {
+    const result = runConfig({
+        DB_CONNECTION: "neon",
+        DATABASE_URL:
+            "postgresql://test:test@ep-pooler.example.com/neondb?sslmode=require",
+        DIRECT_DATABASE_URL: testDirectUrl
+    });
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /DATABASE_URL must use sslmode=verify-full/
+    );
+});
+
+test("configuration rejects unsupported database connection modes", () => {
+    const result = runConfig({
+        DB_CONNECTION: "mysql"
+    });
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /Invalid DB_CONNECTION/
     );
 });
