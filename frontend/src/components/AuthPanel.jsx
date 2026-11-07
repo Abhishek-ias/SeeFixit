@@ -11,125 +11,131 @@ function AuthPanel({ onLogin, onClose }) {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+
   const googleButtonRef = useRef(null)
   const googleInitializedRef = useRef(false)
-
   const onLoginRef = useRef(onLogin)
-  onLoginRef.current = onLogin
 
   const isRegister = mode === 'register'
 
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
+
+  // Keep the latest login callback without updating refs during render.
+  useEffect(() => {
+    onLoginRef.current = onLogin
+  }, [onLogin])
+
+  // Handle Google authentication response.
   const handleGoogleCredential = useCallback(async (credentialResponse) => {
-  const idToken = credentialResponse?.credential
+    const idToken = credentialResponse?.credential
 
-  if (!idToken) {
-    setError('Google did not return a valid credential.')
-    return
-  }
-
-  setError('')
-  setMessage('')
-  setLoading(true)
-
-  try {
-    const response = await authApi.googleLogin(idToken)
-
-    const { token, user } = response.data ?? {}
-
-    if (!token || !user) {
-      throw new Error('Invalid Google login response from server.')
-    }
-
-    onLoginRef.current({ token, user })
-
-  } catch (err) {
-    setError(err.message || 'Google login failed. Please try again.')
-  } finally {
-    setLoading(false)
-  }
-}, [])
-
-
-useEffect(() => {
-  if (isRegister) return
-
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim()
-
-  if (!clientId) {
-    setError('Google Sign-In is not configured.')
-    return
-  }
-
-  let cancelled = false
-
-  const googleScript = document.querySelector(
-    'script[src="https://accounts.google.com/gsi/client"]'
-  )
-
-  function renderGoogleButton() {
-    if (
-      cancelled ||
-      !window.google?.accounts?.id ||
-      !googleButtonRef.current
-    ) {
+    if (!idToken) {
+      setError('Google did not return a valid credential.')
       return
     }
 
-    const googleIdentity = window.google.accounts.id
+    setError('')
+    setMessage('')
+    setLoading(true)
 
-    if (!googleInitializedRef.current) {
-      googleIdentity.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredential,
-        auto_select: false,
-      })
+    try {
+      const response = await authApi.googleLogin(idToken)
 
-      googleInitializedRef.current = true
-    }
+      const { token, user } = response.data ?? {}
 
-    googleButtonRef.current.replaceChildren()
-
-    googleIdentity.renderButton(
-      googleButtonRef.current,
-      {
-        theme: 'outline',
-        size: 'large',
-        text: 'continue_with',
-        shape: 'rectangular',
-        width: 320,
+      if (!token || !user) {
+        throw new Error('Invalid Google login response from server.')
       }
-    )
-  }
 
-  function handleScriptError() {
-    if (!cancelled) {
-      setError('Unable to load Google Sign-In. Check your internet connection.')
+      onLoginRef.current({ token, user })
+
+    } catch (err) {
+      setError(err.message || 'Google login failed. Please try again.')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [])
 
-  if (window.google?.accounts?.id) {
-    renderGoogleButton()
-  } else if (googleScript) {
-    googleScript.addEventListener('load', renderGoogleButton)
-    googleScript.addEventListener('error', handleScriptError)
-  } else {
-    setError('Google Sign-In script was not found.')
-  }
+  // Initialize Google Identity Services and render its official button.
+  useEffect(() => {
+    if (isRegister || !googleClientId) return
 
-  return () => {
-    cancelled = true
+    const controller = new AbortController()
 
-    googleScript?.removeEventListener('load', renderGoogleButton)
-    googleScript?.removeEventListener('error', handleScriptError)
-  }
-}, [isRegister, handleGoogleCredential])
+    const googleScript = document.querySelector(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    )
 
+    function renderGoogleButton() {
+      if (
+        controller.signal.aborted ||
+        !window.google?.accounts?.id ||
+        !googleButtonRef.current
+      ) {
+        return
+      }
+
+      const googleIdentity = window.google.accounts.id
+
+      if (!googleInitializedRef.current) {
+        googleIdentity.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredential,
+          auto_select: false,
+        })
+
+        googleInitializedRef.current = true
+      }
+
+      googleButtonRef.current.replaceChildren()
+
+      googleIdentity.renderButton(
+        googleButtonRef.current,
+        {
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'rectangular',
+          width: 320,
+        }
+      )
+    }
+
+    function handleScriptError() {
+      setError(
+        'Unable to load Google Sign-In. Check your internet connection.'
+      )
+    }
+
+    if (window.google?.accounts?.id) {
+      renderGoogleButton()
+    } else if (googleScript) {
+      googleScript.addEventListener(
+        'load',
+        renderGoogleButton,
+        { signal: controller.signal }
+      )
+
+      googleScript.addEventListener(
+        'error',
+        handleScriptError,
+        { signal: controller.signal }
+      )
+    } else {
+      console.error('Google Sign-In script was not found.')
+    }
+
+    return () => {
+      controller.abort()
+    }
+  }, [isRegister, googleClientId, handleGoogleCredential])
+
+  // Email/password registration and login.
   async function handleSubmit(event) {
     event.preventDefault()
 
     setError('')
     setMessage('')
-
     setLoading(true)
 
     try {
@@ -144,6 +150,7 @@ useEffect(() => {
         setName('')
         setPassword('')
         setMessage('Registration successful! Please log in.')
+
       } else {
         const response = await authApi.login({
           email: email.trim(),
@@ -159,6 +166,7 @@ useEffect(() => {
         setPassword('')
         onLogin({ token, user })
       }
+
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -166,6 +174,7 @@ useEffect(() => {
     }
   }
 
+  // Switch between registration and login.
   function switchMode() {
     setMode(isRegister ? 'login' : 'register')
     setError('')
@@ -176,6 +185,7 @@ useEffect(() => {
   return (
     <div className="auth-overlay">
       <section className="auth-panel">
+
         {onClose && (
           <button
             type="button"
@@ -190,7 +200,9 @@ useEffect(() => {
         <div className="auth-heading">
           <span className="auth-logo">SF</span>
 
-          <h2>{isRegister ? 'Create your account' : 'Welcome back'}</h2>
+          <h2>
+            {isRegister ? 'Create your account' : 'Welcome back'}
+          </h2>
 
           <p>
             {isRegister
@@ -200,9 +212,11 @@ useEffect(() => {
         </div>
 
         <form onSubmit={handleSubmit}>
+
           {isRegister && (
             <div className="auth-field">
               <label htmlFor="auth-name">Full name</label>
+
               <input
                 id="auth-name"
                 type="text"
@@ -218,6 +232,7 @@ useEffect(() => {
 
           <div className="auth-field">
             <label htmlFor="auth-email">Email address</label>
+
             <input
               id="auth-email"
               type="email"
@@ -231,6 +246,7 @@ useEffect(() => {
 
           <div className="auth-field">
             <label htmlFor="auth-password">Password</label>
+
             <input
               id="auth-password"
               type="password"
@@ -246,6 +262,12 @@ useEffect(() => {
           {error && (
             <p className="auth-error" role="alert">
               {error}
+            </p>
+          )}
+
+          {!isRegister && !googleClientId && (
+            <p className="auth-error" role="alert">
+              Google Sign-In is not configured.
             </p>
           )}
 
@@ -266,10 +288,12 @@ useEffect(() => {
                 ? 'Create account'
                 : 'Log in'}
           </button>
+
         </form>
 
         {!isRegister && (
           <div className="google-auth">
+
             <div className="auth-divider">
               <span>or continue with</span>
             </div>
@@ -278,6 +302,7 @@ useEffect(() => {
               ref={googleButtonRef}
               className="google-button-container"
             />
+
           </div>
         )}
 
@@ -290,6 +315,7 @@ useEffect(() => {
             {isRegister ? 'Log in' : 'Register'}
           </button>
         </p>
+
       </section>
     </div>
   )

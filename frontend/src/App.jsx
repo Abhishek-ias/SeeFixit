@@ -16,6 +16,8 @@ const steps = [
   { number: '03', title: 'Track the resolution', description: 'Follow progress and check the resolution evidence.' },
 ]
 
+const currentYear = new Date().getFullYear()
+
 function App() {
   const [authOpen, setAuthOpen] = useState(false)
   const [session, setSession] = useState(null)
@@ -185,7 +187,7 @@ function App() {
           <span>See<span className="brand-highlight">Fixit</span></span>
         </a>
         <p>Making communities better, one report at a time.</p>
-        <span>© {new Date().getFullYear()} SeeFixit</span>
+        <span>© {currentYear} SeeFixit</span>
             </footer>
 
       {notice && (
