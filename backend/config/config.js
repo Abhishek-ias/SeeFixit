@@ -154,6 +154,15 @@ if (isProduction && jwtSecret.length < 32) {
     );
 }
 
+const googleClientId =
+    process.env.GOOGLE_CLIENT_ID?.trim() || null;
+
+if (isProduction && !googleClientId) {
+    throw new Error(
+        "Missing required environment variable: GOOGLE_CLIENT_ID"
+    );
+}
+
 
 // ======================================================
 // Frontend Origin Validation
@@ -245,7 +254,8 @@ const config = {
     },
 
     auth: {
-        jwtSecret
+        jwtSecret,
+        googleClientId
     },
 
     db: databaseConfig,

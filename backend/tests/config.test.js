@@ -37,6 +37,7 @@ function runConfig(overrides = {}, removeVariables = []) {
         DB_PORT: "5432",
 
         JWT_SECRET: "test-secret-with-at-least-32-characters",
+        GOOGLE_CLIENT_ID: "test-google-client-id.apps.googleusercontent.com",
         PORT: "5000",
 
         ...overrides
@@ -56,6 +57,7 @@ function runConfig(overrides = {}, removeVariables = []) {
     port: config.server.port,
     frontendOrigin: config.server.frontendOrigin,
     jwtConfigured: Boolean(config.auth.jwtSecret),
+    googleClientIdConfigured: Boolean(config.auth.googleClientId),
 
     dbConnection: config.db.connectionString
         ? "neon"
@@ -236,6 +238,45 @@ test("configuration rejects a missing JWT secret", () => {
 
 
 // ======================================================
+// Google Authentication Configuration
+// ======================================================
+
+test("development allows an optional Google Client ID", () => {
+
+    const result = runConfig(
+        {},
+        ["NODE_ENV", "FRONTEND_ORIGIN", "DB_SSL", "GOOGLE_CLIENT_ID"]
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+
+    const config = parseConfigOutput(result);
+
+    assert.equal(config.googleClientIdConfigured, false);
+});
+
+
+test("production requires a Google Client ID", () => {
+
+    const result = runConfig(
+        {
+            NODE_ENV: "production",
+            FRONTEND_ORIGIN: "https://seefixit.example.com"
+        },
+        ["GOOGLE_CLIENT_ID", "DB_SSL"]
+    );
+
+    assert.notEqual(result.status, 0);
+
+    assert.match(
+        result.stderr,
+        /Missing required environment variable: GOOGLE_CLIENT_ID/
+    );
+});
+
+
+
+// ======================================================
 // 7. Valid Production Configuration
 // ======================================================
 
@@ -263,6 +304,7 @@ test("production configuration accepts valid settings", () => {
     );
 
     assert.equal(config.jwtConfigured, true);
+    assert.equal(config.googleClientIdConfigured, true);
     assert.equal(config.dbSsl, true);
 });
 

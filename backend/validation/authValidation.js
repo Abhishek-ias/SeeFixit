@@ -47,8 +47,23 @@ const loginSchema = Joi.object({
 
 });
 
+// ======================================================
+// Google Login Validation
+// ======================================================
+
+const googleLoginSchema = Joi.object({
+
+    idToken: Joi.string()
+        .trim()
+        .min(1)
+        .max(4096)
+        .required()
+
+});
+
 
 module.exports = {
     registerSchema,
-    loginSchema
+    loginSchema,
+    googleLoginSchema
 };

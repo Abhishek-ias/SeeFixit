@@ -1,2 +1,14 @@
+
+# Backend environment files
 backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Frontend environment files
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Dependencies
 backend/node_modules/
+frontend/node_modules/

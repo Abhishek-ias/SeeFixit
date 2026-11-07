@@ -12,7 +12,8 @@ const validate = require("../middleware/validate");
 
 const {
     registerSchema,
-    loginSchema
+    loginSchema,
+    googleLoginSchema
 } = require("../validation/authValidation");
 
 const {
@@ -21,7 +22,8 @@ const {
 
 const {
     registerUser,
-    loginUser
+    loginUser,
+    loginWithGoogle
 } = require("../services/authService");
 
 
@@ -113,6 +115,39 @@ router.post(
     }
 );
 
+
+
+// ======================================================
+// POST /api/auth/google
+// Login using Google ID token
+// ======================================================
+
+router.post(
+    "/google",
+    validate(googleLoginSchema),
+    async (req, res, next) => {
+
+        try {
+
+            const { idToken } = req.body;
+
+            const result = await loginWithGoogle(idToken);
+
+            return sendSuccess(
+                res,
+                200,
+                "Google login successful",
+                result
+            );
+
+        } catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
 
 
 // ======================================================

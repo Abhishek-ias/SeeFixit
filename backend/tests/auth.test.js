@@ -94,3 +94,14 @@ test("login rejects an incorrect password", async () => {
     );
     assert.ok(response.headers["x-request-id"]);
 });
+
+test("Google login rejects a missing ID token", async () => {
+    const response = await request(app)
+        .post("/api/auth/google")
+        .send({});
+
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "Validation failed");
+    assert.ok(Array.isArray(response.body.details));
+    assert.ok(response.headers["x-request-id"]);
+});
