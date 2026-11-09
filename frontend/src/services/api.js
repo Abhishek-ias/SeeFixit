@@ -2,6 +2,10 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.trim() || '/api';
 
+// Share one refresh request between concurrent callers.
+// This prevents duplicate token rotation in React Strict Mode.
+let refreshPromise = null;
+
 /**
  * Reusable API request handler.
  */
@@ -28,6 +32,7 @@ export async function apiRequest(
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers: requestHeaders,
+      credentials: 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -51,8 +56,20 @@ export async function apiRequest(
 }
 
 /**
- * Authentication APIs.
+ * Refresh session with concurrent-request protection.
  */
+function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = apiRequest('/auth/refresh', {
+      method: 'POST',
+    }).finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
 /**
  * Authentication APIs.
  */
@@ -74,9 +91,14 @@ export const authApi = {
       method: 'POST',
       body: { idToken },
     }),
+
+  refresh: () => refreshSession(),
+
+  logout: () =>
+    apiRequest('/auth/logout', {
+      method: 'POST',
+    }),
 };
-
-
 
 /**
  * Citizen report APIs.

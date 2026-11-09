@@ -1,12 +1,10 @@
+
 require("dotenv").config();
 
-
 const express = require("express");
-
-
-
 const helmet = require("helmet");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
 const pool = require("./db/database");
 
@@ -14,15 +12,11 @@ const app = express();
 
 app.disable("x-powered-by");
 
-
 const swaggerUi = require("swagger-ui-express");
-
 const swaggerSpec = require("./config/swagger");
 
 const config = require("./config/config");
-
 const logger = require("./utils/logger");
-
 const requestLogger = require("./middleware/requestLogger");
 
 // ======================================================
@@ -31,8 +25,6 @@ const requestLogger = require("./middleware/requestLogger");
 
 const apiHelmet = helmet();
 
-// Swagger UI needs a separate CSP configuration
-// because its inline scripts may be blocked by the default CSP.
 const docsHelmet = helmet({
     contentSecurityPolicy: false
 });
@@ -55,13 +47,14 @@ app.use((req, res, next) => {
 
 app.use(cors({
     origin: (origin, callback) => {
-
         if (!origin || origin === config.server.frontendOrigin) {
             return callback(null, true);
         }
 
         return callback(null, false);
     },
+
+    credentials: true,
 
     methods: [
         "GET",
@@ -87,6 +80,9 @@ app.use(express.json({
     limit: "10kb"
 }));
 
+// Essential for reading HttpOnly refresh-token cookies.
+app.use(cookieParser());
+
 app.use(requestLogger);
 
 // ======================================================
@@ -96,7 +92,6 @@ app.use(requestLogger);
 const apiLimiter = require("./middleware/rateLimiter");
 
 app.use(apiLimiter);
-
 
 // ======================================================
 // Routes
@@ -108,7 +103,6 @@ const authRoutes = require("./routes/authRoutes");
 app.use("/api", reportRoutes);
 app.use("/api/auth", authRoutes);
 
-
 // ======================================================
 // Authentication Middleware
 // ======================================================
@@ -119,17 +113,12 @@ app.get(
     "/api/test-auth",
     authenticateToken,
     (req, res) => {
-
         res.json({
             message: "You are authenticated",
             user: req.user
         });
-
     }
 );
-
-
-
 
 // ======================================================
 // Readiness Check
@@ -164,8 +153,6 @@ async function readinessHandler(req, res) {
 app.get("/api/health", readinessHandler);
 app.get("/api/health/ready", readinessHandler);
 
-
-
 // ======================================================
 // Liveness Check
 // ======================================================
@@ -180,7 +167,6 @@ app.get("/api/health/live", (req, res) => {
     });
 });
 
-
 // ======================================================
 // Error Handling Middleware
 // ======================================================
@@ -189,7 +175,9 @@ const errorHandler = require("./middleware/errorMiddleware");
 
 app.use(errorHandler);
 
-
+// ======================================================
+// Swagger Documentation
+// ======================================================
 
 app.use(
     "/api-docs",
@@ -200,10 +188,6 @@ app.use(
 // ======================================================
 // Start Server
 // ======================================================
-
-
-
-
 
 const port = config.server.port;
 

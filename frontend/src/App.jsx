@@ -1,13 +1,14 @@
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AuthPanel from './components/AuthPanel'
+import { authApi } from './services/api'
 import './App.css'
 
 const categories = [
-  { icon: '🛣️', name: 'Roads & Potholes', description: 'Damaged roads, potholes and broken footpaths' },
-  { icon: '🗑️', name: 'Sanitation', description: 'Garbage accumulation and waste management' },
-  { icon: '💧', name: 'Water Supply', description: 'Water leakage and drainage problems' },
-  { icon: '💡', name: 'Street Lighting', description: 'Damaged or non-working streetlights' },
+  { icon: '\u{1F6A7}', name: 'Roads & Potholes', description: 'Damaged roads, potholes and broken footpaths' },
+  { icon: '\u{1F5D1}\uFE0F', name: 'Sanitation', description: 'Garbage accumulation and waste management' },
+  { icon: '\u{1F4A7}', name: 'Water Supply', description: 'Water leakage and drainage problems' },
+  { icon: '\u{1F4A1}', name: 'Street Lighting', description: 'Damaged or non-working streetlights' },
 ]
 
 const steps = [
@@ -21,7 +22,48 @@ const currentYear = new Date().getFullYear()
 function App() {
   const [authOpen, setAuthOpen] = useState(false)
   const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [notice, setNotice] = useState('')
+
+  // Restore session when the application starts.
+  useEffect(() => {
+    let active = true
+
+    async function restoreSession() {
+      try {
+        const response = await authApi.refresh()
+
+        if (!active) return
+
+        const { token, user } = response?.data ?? {}
+
+        if (token && user) {
+          setSession({ token, user })
+        } else {
+          setSession(null)
+        }
+      } catch (error) {
+        if (!active) return
+
+        if (error.status !== 401) {
+          console.error('Session restoration failed:', error)
+          setNotice('Unable to verify your saved session. Please check your connection.')
+        }
+
+        setSession(null)
+      } finally {
+        if (active) {
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    restoreSession()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   function openAuth() {
     setNotice('')
@@ -34,12 +76,20 @@ function App() {
     setNotice(`Welcome, ${newSession.user.name}!`)
   }
 
-  function handleLogout() {
-    setSession(null)
-    setNotice('You have been logged out.')
+  async function handleLogout() {
+    try {
+      await authApi.logout()
+
+      setSession(null)
+      setNotice('You have been logged out.')
+    } catch (error) {
+      setNotice(error.message || 'Unable to log out. Please try again.')
+    }
   }
 
   function handleReportClick() {
+    if (authLoading) return
+
     if (!session) {
       openAuth()
       return
@@ -62,15 +112,19 @@ function App() {
           <a href="#about">About</a>
         </nav>
 
-        {session ? (
-  <button className="nav-login" onClick={handleLogout}>
-    Logout
-  </button>
-) : (
-  <button className="nav-login" onClick={openAuth}>
-    Get started
-  </button>
-)}
+        {authLoading ? (
+          <button className="nav-login" disabled>
+            Checking session...
+          </button>
+        ) : session ? (
+          <button className="nav-login" onClick={handleLogout}>
+            Logout
+          </button>
+        ) : (
+          <button className="nav-login" onClick={openAuth}>
+            Get started
+          </button>
+        )}
       </header>
 
       <main>
@@ -90,9 +144,14 @@ function App() {
             </p>
 
             <div className="hero-actions">
-              <button className="button-primary" onClick={handleReportClick}>
-                Report a civic issue <span>→</span>
-                </button>
+              <button
+                className="button-primary"
+                onClick={handleReportClick}
+                disabled={authLoading}
+              >
+                Report a civic issue <span>{'\u2192'}</span>
+              </button>
+
               <a className="button-secondary" href="#categories">
                 Explore issues
               </a>
@@ -108,16 +167,18 @@ function App() {
             <div className="visual-card">
               <div className="visual-card-header">
                 <span>SEE IT. REPORT IT. FIX IT.</span>
-                <span className="live-dot">● COMMUNITY</span>
+                <span className="live-dot">{'\u2022'} COMMUNITY</span>
               </div>
 
               <div className="visual-map">
                 <div className="map-road road-one"></div>
                 <div className="map-road road-two"></div>
                 <div className="map-road road-three"></div>
-                <div className="map-pin pin-one">📍</div>
-                <div className="map-pin pin-two">📍</div>
-                <div className="map-pin pin-three">📍</div>
+
+                <div className="map-pin pin-one">{'\u{1F4CD}'}</div>
+                <div className="map-pin pin-two">{'\u{1F4CD}'}</div>
+                <div className="map-pin pin-three">{'\u{1F4CD}'}</div>
+
                 <div className="map-label">YOUR NEIGHBOURHOOD</div>
               </div>
 
@@ -126,10 +187,14 @@ function App() {
                   <strong>Local problems</strong>
                   <span>Deserve visible solutions.</span>
                 </div>
-                <span className="visual-arrow">↗</span>
+
+                <span className="visual-arrow">{'\u2197'}</span>
               </div>
             </div>
-            <div className="floating-badge">🏙️ Community powered</div>
+
+            <div className="floating-badge">
+              {'\u{1F64C}\uFE0F'} Community powered
+            </div>
           </div>
         </section>
 
@@ -139,7 +204,10 @@ function App() {
               <span className="eyebrow">WHAT NEEDS ATTENTION?</span>
               <h2>Report issues around you</h2>
             </div>
-            <p>Choose a category to understand the types of civic problems SeeFixit supports.</p>
+
+            <p>
+              Choose a category to understand the types of civic problems SeeFixit supports.
+            </p>
           </div>
 
           <div className="category-grid">
@@ -148,7 +216,7 @@ function App() {
                 <span className="category-icon">{category.icon}</span>
                 <h3>{category.name}</h3>
                 <p>{category.description}</p>
-                <span className="card-arrow">↗</span>
+                <span className="card-arrow">{'\u2197'}</span>
               </article>
             ))}
           </div>
@@ -176,8 +244,13 @@ function App() {
         <section className="closing-banner" id="about">
           <span className="eyebrow">CHANGE STARTS WITH YOU</span>
           <h2>Better neighbourhoods begin with better reporting.</h2>
-          <p>Together, we can make civic problems visible and encourage action.</p>
-          <a href="#categories" className="button-light">Explore civic issues →</a>
+          <p>
+            Together, we can make civic problems visible and encourage action.
+          </p>
+
+          <a href="#categories" className="button-light">
+            Explore civic issues {'\u2192'}
+          </a>
         </section>
       </main>
 
@@ -186,9 +259,10 @@ function App() {
           <span className="brand-mark">SF</span>
           <span>See<span className="brand-highlight">Fixit</span></span>
         </a>
+
         <p>Making communities better, one report at a time.</p>
-        <span>© {currentYear} SeeFixit</span>
-            </footer>
+        <span>{'\u00A9'} {currentYear} SeeFixit</span>
+      </footer>
 
       {notice && (
         <p className="app-notice" role="status">

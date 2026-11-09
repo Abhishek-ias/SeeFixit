@@ -1,18 +1,18 @@
+
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 
 const pool = require("../db/database");
-
 const AppError = require("../utils/AppError");
 
 const { OAuth2Client } = require("google-auth-library");
 
 const config = require("../config/config");
 
+const { createSession } = require("./sessionService");
+
 const googleClient = config.auth.googleClientId
     ? new OAuth2Client(config.auth.googleClientId)
     : null;
-
 
 
 // ======================================================
@@ -20,10 +20,6 @@ const googleClient = config.auth.googleClientId
 // ======================================================
 
 async function registerUser(name, email, password) {
-
-    // ------------------------------------------
-    // Check whether email already exists
-    // ------------------------------------------
 
     const existingUserQuery = `
         SELECT id
@@ -36,30 +32,17 @@ async function registerUser(name, email, password) {
         [email]
     );
 
-
     if (existingUser.rows.length > 0) {
-
         throw new AppError(
             "Email already registered",
             409
         );
-
     }
-
-
-    // ------------------------------------------
-    // Hash password
-    // ------------------------------------------
 
     const passwordHash = await bcrypt.hash(
         password,
         10
     );
-
-
-    // ------------------------------------------
-    // Create user
-    // ------------------------------------------
 
     const insertQuery = `
         INSERT INTO users (
@@ -78,44 +61,37 @@ async function registerUser(name, email, password) {
         passwordHash
     ];
 
-
     try {
 
-    const result = await pool.query(
-        insertQuery,
-        values
-    );
-
-    return result.rows[0];
-
-}
-catch (error) {
-
-    if (
-        error.code === "23505" &&
-        error.constraint === "users_email_unique"
-    ) {
-
-        throw new AppError(
-            "Email already registered",
-            409
+        const result = await pool.query(
+            insertQuery,
+            values
         );
 
+        return result.rows[0];
+
+    } catch (error) {
+
+        if (
+            error.code === "23505" &&
+            error.constraint === "users_email_unique"
+        ) {
+            throw new AppError(
+                "Email already registered",
+                409
+            );
+        }
+
+        throw error;
     }
-
-    throw error;
 }
 
-}
+
 // ======================================================
 // LOGIN USER
 // ======================================================
 
 async function loginUser(email, password) {
-
-    // ------------------------------------------
-    // Find user
-    // ------------------------------------------
 
     const query = `
         SELECT *
@@ -128,90 +104,47 @@ async function loginUser(email, password) {
         [email]
     );
 
-
-    // ------------------------------------------
-    // User not found
-    // ------------------------------------------
-
     if (result.rows.length === 0) {
-
         throw new AppError(
             "Invalid email or password",
             401
         );
-
     }
-
 
     const user = result.rows[0];
 
-
-    // ------------------------------------------
-    // Compare password
-    // ------------------------------------------
-
     // Google-only accounts cannot use password login.
-if (!user.password_hash) {
-    throw new AppError(
-        "Invalid email or password",
-        401
-    );
-}
-
-// Compare password with stored hash.
-const passwordMatch = await bcrypt.compare(
-    password,
-    user.password_hash
-);
-
-
-    if (!passwordMatch) {
-
+    if (!user.password_hash) {
         throw new AppError(
             "Invalid email or password",
             401
         );
-
     }
 
-
-    // ------------------------------------------
-    // Create JWT
-    // ------------------------------------------
-
-    const token = jwt.sign(
-        {
-            userId: user.id,
-            role: user.role
-        },
-        config.auth.jwtSecret,
-        {
-            expiresIn: "1h"
-        }
+    const passwordMatch = await bcrypt.compare(
+        password,
+        user.password_hash
     );
 
+    if (!passwordMatch) {
+        throw new AppError(
+            "Invalid email or password",
+            401
+        );
+    }
 
-    return {
-        token: token,
-
-        user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-        }
-    };
+    // Create access and refresh tokens.
+    // The route will send the refresh token
+    // through an HttpOnly cookie.
+    return createSession(user);
 }
+
 
 // ======================================================
 // GOOGLE LOGIN
 // ======================================================
 
 async function loginWithGoogle(idToken, client = googleClient) {
-
-    // ------------------------------------------
-    // Check Google configuration
-    // ------------------------------------------
 
     if (!client) {
         throw new AppError(
@@ -220,9 +153,9 @@ async function loginWithGoogle(idToken, client = googleClient) {
         );
     }
 
-    // ------------------------------------------
+    // --------------------------------------------------
     // Verify Google ID token
-    // ------------------------------------------
+    // --------------------------------------------------
 
     let payload;
 
@@ -241,12 +174,11 @@ async function loginWithGoogle(idToken, client = googleClient) {
             "Invalid Google token",
             401
         );
-
     }
 
-    // ------------------------------------------
+    // --------------------------------------------------
     // Validate Google account information
-    // ------------------------------------------
+    // --------------------------------------------------
 
     if (
         !payload ||
@@ -255,21 +187,19 @@ async function loginWithGoogle(idToken, client = googleClient) {
         payload.email_verified !== true ||
         !payload.name
     ) {
-
         throw new AppError(
             "Google account information is invalid or email is not verified",
             401
         );
-
     }
 
     const googleSub = payload.sub;
     const email = payload.email.trim().toLowerCase();
     const name = payload.name.trim();
 
-    // ------------------------------------------
+    // --------------------------------------------------
     // Find existing Google account
-    // ------------------------------------------
+    // --------------------------------------------------
 
     const googleUserQuery = `
         SELECT id, name, email, role
@@ -290,9 +220,9 @@ async function loginWithGoogle(idToken, client = googleClient) {
 
     } else {
 
-        // ------------------------------------------
+        // --------------------------------------------------
         // Prevent automatic account linking
-        // ------------------------------------------
+        // --------------------------------------------------
 
         const emailUserQuery = `
             SELECT id
@@ -306,17 +236,15 @@ async function loginWithGoogle(idToken, client = googleClient) {
         );
 
         if (emailUserResult.rows.length > 0) {
-
             throw new AppError(
                 "An account with this email already exists. Please sign in using your existing method.",
                 409
             );
-
         }
 
-        // ------------------------------------------
+        // --------------------------------------------------
         // Create new Google-only account
-        // ------------------------------------------
+        // --------------------------------------------------
 
         const insertQuery = `
             INSERT INTO users (
@@ -367,46 +295,22 @@ async function loginWithGoogle(idToken, client = googleClient) {
                 } else {
 
                     throw error;
-
                 }
 
             } else {
 
                 throw error;
-
             }
-
         }
-
     }
 
-    // ------------------------------------------
-    // Generate SeeFixit JWT
-    // ------------------------------------------
+    // --------------------------------------------------
+    // Create session for Google user
+    // --------------------------------------------------
 
-    const token = jwt.sign(
-        {
-            userId: user.id,
-            role: user.role
-        },
-        config.auth.jwtSecret,
-        {
-            expiresIn: "1h"
-        }
-    );
-
-    return {
-        token,
-
-        user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-        }
-    };
-
+    return createSession(user);
 }
+
 
 // ======================================================
 // EXPORT
@@ -415,5 +319,5 @@ async function loginWithGoogle(idToken, client = googleClient) {
 module.exports = {
     registerUser,
     loginUser,
-     loginWithGoogle
+    loginWithGoogle
 };
