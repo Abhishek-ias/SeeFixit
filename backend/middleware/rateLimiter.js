@@ -1,4 +1,3 @@
-
 const rateLimit = require("express-rate-limit");
 const config = require("../config/config");
 
@@ -16,15 +15,28 @@ const apiLimiter = rateLimit({
 
     max: 100,
 
-        // Identify each client using a validated IP.
+    // Identify each client using a validated IP.
     keyGenerator: clientIpKeyGenerator,
 
-    // Health checks must not consume the API rate-limit quota.
-    skip: (req) => [
-        "/api/health",
-        "/api/health/ready",
-        "/api/health/live"
-    ].includes(req.path),
+    // Only API requests should consume the global API rate limit.
+    skip: (req) => {
+        const requestPath = req.path;
+
+        // Ignore requests outside the API.
+        if (
+            requestPath !== "/api" &&
+            !requestPath.startsWith("/api/")
+        ) {
+            return true;
+        }
+
+        // Health checks must not consume the API quota.
+        return [
+            "/api/health",
+            "/api/health/ready",
+            "/api/health/live"
+        ].includes(requestPath);
+    },
 
     message: {
         success: false,

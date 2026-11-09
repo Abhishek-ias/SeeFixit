@@ -143,3 +143,53 @@ test("health checks bypass the global API rate limiter", async () => {
         );
     }
 });
+
+
+
+// 7. Non-API requests bypass the global API rate limiter.
+
+test("non-API requests bypass the global API rate limiter", async () => {
+
+    const response = await request(app)
+        .head("/");
+
+    assert.equal(response.status, 404);
+
+    assert.equal(
+        response.headers["x-ratelimit-limit"],
+        undefined
+    );
+
+    assert.equal(
+        response.headers["ratelimit-limit"],
+        undefined
+    );
+});
+
+
+// 8. API requests remain protected by the global rate limiter.
+
+test("global API rate limiter blocks the 101st request", async () => {
+
+    for (let attempt = 1; attempt <= 100; attempt++) {
+
+        const response = await request(app)
+            .get("/api/__rate_limit_probe__");
+
+        assert.equal(
+            response.status,
+            404,
+            `API request ${attempt} should reach the endpoint`
+        );
+
+        assert.equal(
+            response.headers["x-ratelimit-limit"],
+            "100"
+        );
+    }
+
+    const blockedResponse = await request(app)
+        .get("/api/__rate_limit_probe__");
+
+    assert.equal(blockedResponse.status, 429);
+});
