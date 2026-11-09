@@ -123,3 +123,23 @@ test("API rejects JSON requests larger than 10 KB", async () => {
         "Request body too large"
     );
 });
+
+
+// 6. Health checks bypass the global API rate limiter.
+
+test("health checks bypass the global API rate limiter", async () => {
+
+    // Send more requests than the global limit of 100.
+    // Liveness does not require a database connection.
+    for (let attempt = 1; attempt <= 105; attempt++) {
+
+        const response = await request(app)
+            .get("/api/health/live");
+
+        assert.equal(
+            response.status,
+            200,
+            `Health check failed on attempt ${attempt}`
+        );
+    }
+});
