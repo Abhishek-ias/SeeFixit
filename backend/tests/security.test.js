@@ -73,6 +73,17 @@ test("authentication rate limiter blocks the 11th attempt", async () => {
         );
     }
 
+    // Refresh must not consume the login-attempt allowance.
+    const refreshResponse = await request(app)
+        .post("/api/auth/refresh")
+        .send({});
+
+    assert.equal(
+        refreshResponse.status,
+        401,
+        "Refresh should reach session validation, not the login limiter"
+    );
+
     const blockedResponse = await request(app)
         .post("/api/auth/login")
         .send({});

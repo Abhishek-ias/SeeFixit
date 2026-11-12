@@ -153,7 +153,6 @@ function sendAuthenticatedResponse(
 // RATE LIMITER
 // ======================================================
 
-router.use(authLimiter);
 
 
 // ======================================================
@@ -162,6 +161,7 @@ router.use(authLimiter);
 
 router.post(
     "/register",
+    authLimiter,
     validate(registerSchema),
     async (req, res, next) => {
 
@@ -200,6 +200,7 @@ router.post(
 
 router.post(
     "/login",
+    authLimiter,
     verifyRequestOrigin,
     validate(loginSchema),
     async (req, res, next) => {
@@ -237,6 +238,7 @@ router.post(
 
 router.post(
     "/google",
+    authLimiter,
     verifyRequestOrigin,
     validate(googleLoginSchema),
     async (req, res, next) => {
