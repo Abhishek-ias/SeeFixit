@@ -576,3 +576,164 @@
   padding: 0.35rem 0.65rem;
   border-radius: 4px;
 }
+
+
+/* ── AI Assessment Card ────────────────────────────── */
+.modal-ai-card {
+  background: linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 100%);
+  border: 1px solid #e9d5ff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ai-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ai-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-card-title h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #581c87;
+  font-weight: 700;
+}
+
+.ai-badge-model {
+  background: #f3e8ff;
+  color: #7e22ce;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.ai-card-scores {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ai-confidence-pill {
+  background: #ede9fe;
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.ai-severity-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.severity-critical {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.severity-high {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.severity-medium {
+  background: #fefce8;
+  color: #ca8a04;
+  border: 1px solid #fef08a;
+}
+
+.severity-low {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.ai-card-body {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #374151;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ai-summary-text, .ai-action-text {
+  margin: 0;
+}
+
+.ai-hazard-alert {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
+.ai-feedback-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #f3e8ff;
+  padding-top: 0.75rem;
+  font-size: 0.82rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ai-feedback-label {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.ai-feedback-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.feedback-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.feedback-btn:hover {
+  opacity: 0.85;
+}
+
+.feedback-accurate {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.feedback-inaccurate {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.ai-verified-tag {
+  font-weight: 600;
+  color: #4b5563;
+}

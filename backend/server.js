@@ -99,9 +99,11 @@ app.use(apiLimiter);
 
 const reportRoutes = require("./routes/reportRoutes");
 const authRoutes = require("./routes/authRoutes");
+const open311Routes = require("./routes/open311Routes");
 
 app.use("/api", reportRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/open311/v2", open311Routes);
 
 // ======================================================
 // Authentication Middleware

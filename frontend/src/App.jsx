@@ -14,6 +14,7 @@ import MyReports  from './pages/MyReports'
 import IssueDetail from './pages/IssueDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import MapView from './pages/MapView'
+import NotificationBell from './components/NotificationBell'
 
 import { authApi } from './services/api'
 import './App.css'
@@ -143,6 +144,7 @@ function AppInner() {
           <button className="nav-login" disabled>Checking session…</button>
         ) : session ? (
           <div className="nav-user">
+            <NotificationBell token={session.token} />
             <span className="nav-username">{session.user.name}</span>
             <button className="nav-login" onClick={handleLogout}>Logout</button>
           </div>

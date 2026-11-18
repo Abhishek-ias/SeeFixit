@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { issueApi, adminApi } from '../services/api'
+import { issueApi, adminApi, aiApi } from '../services/api'
 import './AdminDashboard.css'
 
 const STATUS_CONFIG = {
@@ -281,6 +281,24 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     }
   }
 
+  // Handle AI Feedback submission
+  async function handleAiFeedback(isAccurate) {
+    if (!issueDetails?.aiAssessment?.id) return
+
+    try {
+      await aiApi.submitFeedback(selectedIssueId, {
+        assessment_id: issueDetails.aiAssessment.id,
+        is_accurate: isAccurate,
+        feedback_notes: isAccurate ? 'Officer verified AI prediction as accurate.' : 'Officer flagged AI classification as inaccurate.'
+      }, token)
+
+      setNotice('AI evaluation feedback recorded.')
+      loadIssueDetails(selectedIssueId)
+    } catch (err) {
+      alert(err.message || 'Failed to submit feedback.')
+    }
+  }
+
   if (user && user.role !== 'ADMIN') {
     return (
       <div className="admin-container">
@@ -534,6 +552,63 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                     </div>
                   </div>
                 </div>
+
+                {/* AI Assessment Triage Card */}
+                {issueDetails.aiAssessment && (
+                  <div className="modal-ai-card">
+                    <div className="ai-card-top">
+                      <div className="ai-card-title">
+                        <span>🤖</span>
+                        <h4>AI Triage & Hazard Assessment</h4>
+                        <span className="ai-badge-model">{issueDetails.aiAssessment.model_provider}</span>
+                      </div>
+                      <div className="ai-card-scores">
+                        <span className="ai-confidence-pill">
+                          {(issueDetails.aiAssessment.category_confidence * 100).toFixed(0)}% Confidence
+                        </span>
+                        <span className={`ai-severity-pill severity-${issueDetails.aiAssessment.predicted_severity.toLowerCase()}`}>
+                          Severity: {issueDetails.aiAssessment.predicted_severity} ({issueDetails.aiAssessment.severity_score}/100)
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="ai-card-body">
+                      <p className="ai-summary-text"><strong>Summary:</strong> {issueDetails.aiAssessment.summary}</p>
+                      <p className="ai-action-text"><strong>Suggested Action:</strong> {issueDetails.aiAssessment.suggested_action}</p>
+                      {issueDetails.aiAssessment.safety_hazard_detected && (
+                        <div className="ai-hazard-alert">
+                          ⚠️ <strong>Safety Hazard Flagged:</strong> {issueDetails.aiAssessment.hazard_type ? issueDetails.aiAssessment.hazard_type.replace(/_/g, ' ') : 'General Hazard'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="ai-feedback-bar">
+                      <span className="ai-feedback-label">Officer Audit Verification:</span>
+                      {issueDetails.aiAssessment.is_accurate !== null && issueDetails.aiAssessment.is_accurate !== undefined ? (
+                        <span className="ai-verified-tag">
+                          {issueDetails.aiAssessment.is_accurate ? '✅ Verified Accurate by Officer' : '⚠️ Flagged Inaccurate by Officer'}
+                        </span>
+                      ) : (
+                        <div className="ai-feedback-actions">
+                          <button
+                            type="button"
+                            className="feedback-btn feedback-accurate"
+                            onClick={() => handleAiFeedback(true)}
+                          >
+                            👍 Accurate
+                          </button>
+                          <button
+                            type="button"
+                            className="feedback-btn feedback-inaccurate"
+                            onClick={() => handleAiFeedback(false)}
+                          >
+                            👎 Inaccurate
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Grid of Workflows: Status Transition + Assignment */}
                 <div className="modal-workflow-grid">

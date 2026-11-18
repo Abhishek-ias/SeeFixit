@@ -224,3 +224,64 @@ export const adminApi = {
     }),
 };
 
+/**
+ * AI Intelligence & Triage APIs.
+ */
+export const aiApi = {
+  analyze: (title, description) =>
+    apiRequest('/ai/analyze', {
+      method: 'POST',
+      body: { title, description },
+    }),
+
+  submitFeedback: (issueId, feedbackData, token) =>
+    apiRequest(`/issues/${issueId}/ai-feedback`, {
+      method: 'POST',
+      body: feedbackData,
+      token,
+    }),
+};
+
+/**
+ * Citizen resolution feedback and reopening APIs.
+ */
+export const feedbackApi = {
+  submit: (issueId, { rating, comment, is_satisfied }, token) =>
+    apiRequest(`/issues/${issueId}/feedback`, {
+      method: 'POST',
+      body: { rating, comment, is_satisfied },
+      token,
+    }),
+
+  getByIssue: (issueId, token) =>
+    apiRequest(`/issues/${issueId}/feedback`, { token }),
+
+  reopen: (issueId, { reason }, token) =>
+    apiRequest(`/issues/${issueId}/reopen`, {
+      method: 'POST',
+      body: { reason },
+      token,
+    }),
+};
+
+/**
+ * In-app Notification APIs.
+ */
+export const notificationApi = {
+  getAll: ({ limit = 20, offset = 0 } = {}, token) =>
+    apiRequest(`/notifications?limit=${limit}&offset=${offset}`, { token }),
+
+  markRead: (id, token) =>
+    apiRequest(`/notifications/${id}/read`, {
+      method: 'PATCH',
+      token,
+    }),
+
+  markAllRead: (token) =>
+    apiRequest('/notifications/read-all', {
+      method: 'PATCH',
+      token,
+    }),
+};
+
+

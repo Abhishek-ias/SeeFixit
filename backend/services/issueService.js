@@ -1,6 +1,8 @@
 const pool = require("../db/database");
 const AppError = require("../utils/AppError");
 const { isPostgisAvailable, haversineDistance } = require("../utils/gis");
+const { assessReport, getIssueAiAssessment, verifyResolutionEvidence } = require("./aiService");
+const { notifyIssueCitizens, notifyAssignedOfficer } = require("./notificationService");
 
 async function updateIssueStatus(issueId, status, userId, note = null) {
 
@@ -257,6 +259,13 @@ async function updateIssueStatus(issueId, status, userId, note = null) {
 
         await client.query("COMMIT");
 
+        // Notify citizens asynchronously
+        notifyIssueCitizens({
+            civicIssueId: issueId,
+            title: `Issue #${issueId} Status: ${status}`,
+            message: `Civic issue status updated to ${status}.${note ? " Officer note: " + note : ""}`,
+            type: "STATUS_CHANGE"
+        }).catch(() => {});
 
         // ------------------------------------------
         // Return result
@@ -371,7 +380,14 @@ async function uploadEvidence(
         values
     );
 
-    return result.rows[0];
+    const evidence = result.rows[0];
+
+    // Trigger AI resolution verification asynchronously
+    verifyResolutionEvidence(civicIssueId, evidence.id, description).catch((err) => {
+        console.error("AI resolution verification error:", err.message);
+    });
+
+    return evidence;
 }
 
 
@@ -809,6 +825,11 @@ const departmentId =
 
         await client.query("COMMIT");
 
+        // Trigger AI Assessment in background
+        assessReport(reportResult.rows[0].id, civicIssueId, title, description).catch((err) => {
+            console.error("AI assessment background job error:", err.message);
+        });
+
 
         return {
             ...reportResult.rows[0],
@@ -979,6 +1000,7 @@ async function getIssueDetails(issueId) {
         [issueId]
     );
 
+    const aiAssessment = await getIssueAiAssessment(issueId).catch(() => null);
 
     return {
         issue: issueResult.rows[0],
@@ -986,7 +1008,8 @@ async function getIssueDetails(issueId) {
         history: historyResult.rows,
         evidence: evidenceResult.rows,
         assignments: assignmentsResult.rows,
-        auditLogs: auditResult.rows
+        auditLogs: auditResult.rows,
+        aiAssessment
     };
 
 }
@@ -1236,6 +1259,20 @@ async function assignIssue(issueId, assignedToUserId, assignedByUserId, notes = 
 
         await client.query("COMMIT");
 
+        // Notify assigned officer and citizens asynchronously
+        notifyAssignedOfficer({
+            officerId: assignedToUserId,
+            civicIssueId: issueId,
+            issueTitle: issueCheck.rows[0].title
+        }).catch(() => {});
+
+        notifyIssueCitizens({
+            civicIssueId: issueId,
+            title: `Issue #${issueId} Assigned`,
+            message: `A municipal officer has been assigned to investigate and resolve this issue.`,
+            type: "ASSIGNMENT"
+        }).catch(() => {});
+
         return {
             ...result.rows[0],
             assigned_to_name: userCheck.rows[0].name
@@ -1367,6 +1404,133 @@ async function getMapIssues({ category, status, min_lat, max_lat, min_lng, max_l
     }));
 }
 
+// ======================================================
+// CITIZEN RESOLUTION FEEDBACK & REOPEN WORKFLOW
+// ======================================================
+
+async function submitResolutionFeedback({ civicIssueId, userId, rating, comment, isSatisfied }) {
+    const issueCheck = await pool.query(
+        "SELECT id, status FROM civic_issues WHERE id = $1",
+        [civicIssueId]
+    );
+
+    if (issueCheck.rows.length === 0) {
+        throw new AppError("CivicIssue not found", 404);
+    }
+
+    if (issueCheck.rows[0].status !== "RESOLVED") {
+        throw new AppError("Feedback can only be submitted for RESOLVED issues", 400);
+    }
+
+    const query = `
+        INSERT INTO resolution_feedback (
+            civic_issue_id,
+            user_id,
+            rating,
+            comment,
+            is_satisfied
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (civic_issue_id, user_id)
+        DO UPDATE SET
+            rating = EXCLUDED.rating,
+            comment = EXCLUDED.comment,
+            is_satisfied = EXCLUDED.is_satisfied,
+            created_at = CURRENT_TIMESTAMP
+        RETURNING *;
+    `;
+
+    const res = await pool.query(query, [
+        civicIssueId,
+        userId,
+        rating,
+        comment || null,
+        isSatisfied !== undefined ? isSatisfied : (rating >= 3)
+    ]);
+
+    await pool.query(
+        `INSERT INTO audit_logs (
+            entity_type,
+            entity_id,
+            action,
+            performed_by,
+            details
+        ) VALUES ($1, $2, $3, $4, $5)`,
+        [
+            "CIVIC_ISSUE",
+            civicIssueId,
+            "RESOLUTION_FEEDBACK",
+            userId,
+            JSON.stringify({
+                rating,
+                is_satisfied: isSatisfied,
+                has_comment: !!comment
+            })
+        ]
+    );
+
+    return res.rows[0];
+}
+
+async function getResolutionFeedback(civicIssueId) {
+    const query = `
+        SELECT
+            rf.id,
+            rf.civic_issue_id,
+            rf.user_id,
+            rf.rating,
+            rf.comment,
+            rf.is_satisfied,
+            rf.created_at,
+            u.name AS user_name
+        FROM resolution_feedback rf
+        JOIN users u ON rf.user_id = u.id
+        WHERE rf.civic_issue_id = $1
+        ORDER BY rf.created_at DESC;
+    `;
+    const res = await pool.query(query, [civicIssueId]);
+    return res.rows;
+}
+
+async function reopenIssueByCitizen({ civicIssueId, userId, reason }) {
+    const issueCheck = await pool.query(
+        "SELECT id, status FROM civic_issues WHERE id = $1",
+        [civicIssueId]
+    );
+
+    if (issueCheck.rows.length === 0) {
+        throw new AppError("CivicIssue not found", 404);
+    }
+
+    if (issueCheck.rows[0].status !== "RESOLVED") {
+        throw new AppError("Only RESOLVED issues can be reopened", 400);
+    }
+
+    // Verify user is a reporter or authority
+    const reporterCheck = await pool.query(
+        "SELECT id FROM reports WHERE civic_issue_id = $1 AND user_id = $2",
+        [civicIssueId, userId]
+    );
+
+    const userCheck = await pool.query(
+        "SELECT role FROM users WHERE id = $1",
+        [userId]
+    );
+
+    const isAuthority = userCheck.rows.length > 0 && ["ADMIN", "OFFICER"].includes(userCheck.rows[0].role);
+
+    if (reporterCheck.rows.length === 0 && !isAuthority) {
+        throw new AppError("You can only request reopening for issues you have reported", 403);
+    }
+
+    return await updateIssueStatus(
+        civicIssueId,
+        "REOPENED",
+        userId,
+        `Citizen Reopen Request: ${reason || "Resolution dispute"}`
+    );
+}
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
@@ -1381,5 +1545,8 @@ module.exports = {
     getAdminStats,
     getAllOfficers,
     getDepartments,
-    getMapIssues
+    getMapIssues,
+    submitResolutionFeedback,
+    getResolutionFeedback,
+    reopenIssueByCitizen
 };

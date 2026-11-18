@@ -1,6 +1,6 @@
 
 import { useState, useRef, useEffect } from 'react'
-import { reportApi } from '../services/api'
+import { reportApi, aiApi } from '../services/api'
 import './ReportForm.css'
 
 const categories = [
@@ -61,6 +61,9 @@ function ReportForm({ token, onClose, onReportCreated }) {
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false)
   const [pendingSubmit, setPendingSubmit]       = useState(null)
 
+  // AI assistant state
+  const [aiSuggestion, setAiSuggestion] = useState(null)
+
   // ── field helpers ───────────────────────────────────────
   function updateField(field, value) {
     setFormData((cur) => ({ ...cur, [field]: value }))
@@ -78,6 +81,14 @@ function ReportForm({ token, onClose, onReportCreated }) {
   function handleBlur(field) {
     setTouched((cur) => ({ ...cur, [field]: true }))
     setErrors((cur) => ({ ...cur, [field]: validateField(field, formData[field]) }))
+
+    if ((field === 'title' || field === 'description') && formData.title.trim().length >= 4) {
+      aiApi.analyze(formData.title, formData.description)
+        .then((res) => {
+          if (res?.data) setAiSuggestion(res.data)
+        })
+        .catch(() => {})
+    }
   }
 
   // ── GPS ─────────────────────────────────────────────────
@@ -371,6 +382,35 @@ function ReportForm({ token, onClose, onReportCreated }) {
           {/* Category */}
           <div className="report-field">
             <label htmlFor="report-category">Issue category</label>
+
+            {aiSuggestion && (
+              <div className="ai-suggestion-box">
+                <div className="ai-suggestion-header">
+                  <span>✨ AI Triage Suggestion</span>
+                  <span className="ai-confidence">{(aiSuggestion.confidence * 100).toFixed(0)}% confidence</span>
+                </div>
+                <div className="ai-suggestion-body">
+                  <span>
+                    Detected: <strong>{categories.find(c => c.value === aiSuggestion.predictedCategory)?.label}</strong>
+                  </span>
+                  {aiSuggestion.safetyHazardDetected && (
+                    <span className="ai-hazard-pill">
+                      ⚠️ {aiSuggestion.hazardType ? aiSuggestion.hazardType.replace(/_/g, ' ') : 'Hazard'} ({aiSuggestion.severity})
+                    </span>
+                  )}
+                </div>
+                {formData.category !== aiSuggestion.predictedCategory && (
+                  <button
+                    type="button"
+                    className="ai-apply-btn"
+                    onClick={() => updateField('category', aiSuggestion.predictedCategory)}
+                  >
+                    Switch to {categories.find(c => c.value === aiSuggestion.predictedCategory)?.label} →
+                  </button>
+                )}
+              </div>
+            )}
+
             <select
               id="report-category"
               value={formData.category}

@@ -32,10 +32,20 @@ const {
     getAdminStats,
     getAllOfficers,
     getDepartments,
-    getMapIssues
+    getMapIssues,
+    submitResolutionFeedback,
+    getResolutionFeedback,
+    reopenIssueByCitizen
 } = require("../services/issueService");
 
+const {
+    getUserNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead
+} = require("../services/notificationService");
+
 const { haversineDistance } = require("../utils/gis");
+const { analyzeText, recordAiFeedback } = require("../services/aiService");
 
 const {
     sendSuccess,
@@ -338,6 +348,93 @@ router.get(
                 200,
                 "Map issues fetched successfully",
                 issues
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// POST /api/ai/analyze
+// Real-time AI classification & hazard detection
+// PUBLIC / AUTHENTICATED
+// ======================================================
+
+router.post(
+    "/ai/analyze",
+    async (req, res, next) => {
+
+        try {
+
+            const { title, description } = req.body;
+            const analysis = analyzeText(title, description);
+
+            return sendSuccess(
+                res,
+                200,
+                "AI analysis generated successfully",
+                analysis
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// POST /api/issues/:id/ai-feedback
+// Record human officer override / feedback on AI
+// ADMIN ONLY
+// ======================================================
+
+router.post(
+    "/issues/:id/ai-feedback",
+    authenticateToken,
+    requireRole("ADMIN"),
+    validateId,
+    async (req, res, next) => {
+
+        try {
+
+            const {
+                assessment_id,
+                is_accurate,
+                corrected_category,
+                corrected_severity,
+                feedback_notes
+            } = req.body;
+
+            const feedback = await recordAiFeedback(
+                assessment_id,
+                req.user.userId,
+                {
+                    is_accurate,
+                    corrected_category,
+                    corrected_severity,
+                    feedback_notes
+                }
+            );
+
+            return sendSuccess(
+                res,
+                201,
+                "AI feedback recorded successfully",
+                feedback
             );
 
         }
@@ -967,6 +1064,112 @@ router.get(
     }
 );
 
+
+// ======================================================
+// CITIZEN RESOLUTION FEEDBACK & REOPEN ROUTES
+// ======================================================
+
+router.post(
+    "/issues/:id/feedback",
+    authenticateToken,
+    validateId,
+    async (req, res, next) => {
+        try {
+            const { rating, comment, is_satisfied } = req.body;
+            if (!rating || rating < 1 || rating > 5) {
+                return sendError(res, 400, "Rating between 1 and 5 is required");
+            }
+            const feedback = await submitResolutionFeedback({
+                civicIssueId: req.params.id,
+                userId: req.user.userId,
+                rating: parseInt(rating, 10),
+                comment,
+                isSatisfied: is_satisfied
+            });
+            return sendSuccess(res, 201, "Feedback submitted successfully", feedback);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.get(
+    "/issues/:id/feedback",
+    authenticateToken,
+    validateId,
+    async (req, res, next) => {
+        try {
+            const list = await getResolutionFeedback(req.params.id);
+            return sendSuccess(res, 200, "Feedback retrieved", list);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.post(
+    "/issues/:id/reopen",
+    authenticateToken,
+    validateId,
+    async (req, res, next) => {
+        try {
+            const { reason } = req.body;
+            const result = await reopenIssueByCitizen({
+                civicIssueId: req.params.id,
+                userId: req.user.userId,
+                reason
+            });
+            return sendSuccess(res, 200, "Issue reopened successfully", result);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ======================================================
+// NOTIFICATIONS ROUTES
+// ======================================================
+
+router.get(
+    "/notifications",
+    authenticateToken,
+    async (req, res, next) => {
+        try {
+            const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+            const offset = parseInt(req.query.offset, 10) || 0;
+            const result = await getUserNotifications(req.user.userId, limit, offset);
+            return sendSuccess(res, 200, "Notifications fetched", result);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.patch(
+    "/notifications/:id/read",
+    authenticateToken,
+    async (req, res, next) => {
+        try {
+            const updated = await markNotificationAsRead(req.params.id, req.user.userId);
+            return sendSuccess(res, 200, "Notification marked as read", updated);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.patch(
+    "/notifications/read-all",
+    authenticateToken,
+    async (req, res, next) => {
+        try {
+            await markAllNotificationsAsRead(req.user.userId);
+            return sendSuccess(res, 200, "All notifications marked as read");
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 
 // ======================================================
 // EXPORT
