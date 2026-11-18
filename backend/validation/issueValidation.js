@@ -27,7 +27,7 @@ const issueFilterSchema = Joi.object({
         .optional(),
 
     category: Joi.string()
-        .valid("ROAD", "SANITATION", "WATER")
+        .valid("ROAD", "SANITATION", "WATER", "LIGHTING")
         .optional(),
 
     status: Joi.string()

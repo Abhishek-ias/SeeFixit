@@ -17,9 +17,10 @@ const createReportSchema = Joi.object({
 
     category: Joi.string()
         .valid(
-            "ROAD",
-            "SANITATION",
-            "WATER"
+           "ROAD",
+           "SANITATION",
+           "WATER",
+           "LIGHTING"
         )
         .required(),
 

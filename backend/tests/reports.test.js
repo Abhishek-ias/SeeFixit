@@ -1,3 +1,4 @@
+
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { randomUUID } = require("crypto");
@@ -19,7 +20,7 @@ let longitude;
 let createdReportId;
 let createdIssueId;
 
-const category = "ROAD";
+const category = "LIGHTING";
 
 async function findUnusedCoordinates() {
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -195,6 +196,20 @@ test("citizen can create a report", async () => {
     assert.equal(Number(response.body.data.user_id), testUserId);
     assert.ok(response.body.data.civic_issue_id);
     assert.ok(response.headers["x-request-id"]);
+
+    const issueDetailsResponse = await request(app)
+        .get(`/api/issues/${createdIssueId}`)
+        .set("Authorization", `Bearer ${citizenToken}`);
+
+    assert.equal(issueDetailsResponse.status, 200);
+    assert.equal(
+        issueDetailsResponse.body.data.issue.category,
+        "LIGHTING"
+    );
+    assert.equal(
+        issueDetailsResponse.body.data.issue.department_name,
+        "Street Lighting Department"
+    );
 });
 
 test("citizen can retrieve their own report", async () => {

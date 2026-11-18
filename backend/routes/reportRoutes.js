@@ -85,6 +85,7 @@ const AppError = require("../utils/AppError");
  *                   - ROAD
  *                   - SANITATION
  *                   - WATER
+ *                   - LIGHTING
  *                 example: ROAD
  *               latitude:
  *                 type: number
@@ -195,6 +196,7 @@ router.post(
  *             - ROAD
  *             - SANITATION
  *             - WATER
+ *             - LIGHTING
  *         example: ROAD
  *
  *       - in: query

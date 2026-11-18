@@ -38,6 +38,19 @@ test("GET /api/issues filters by category and status", async () => {
     }
 });
 
+test("GET /api/issues accepts LIGHTING category filter", async () => {
+    const response = await request(app)
+        .get("/api/issues?category=LIGHTING");
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.success, true);
+    assert.ok(Array.isArray(response.body.data.issues));
+
+    for (const issue of response.body.data.issues) {
+        assert.equal(issue.category, "LIGHTING");
+    }
+});
+
 test("GET /api/issues respects pagination limit", async () => {
     const response = await request(app)
         .get("/api/issues?page=1&limit=2");

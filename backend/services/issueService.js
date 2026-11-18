@@ -408,7 +408,8 @@ async function createReport(
     const departmentNames = {
     ROAD: "Road Department",
     SANITATION: "Sanitation Department",
-    WATER: "Water Department"
+    WATER: "Water Department",
+    LIGHTING: "Street Lighting Department"
 };
 
 const departmentName = departmentNames[category];
@@ -902,5 +903,6 @@ module.exports = {
     getMyReports,
     getMyReportById,
     createReport,
+    getIssueDetails,
     getAllIssues
 };

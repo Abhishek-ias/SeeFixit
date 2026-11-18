@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react'
 import AuthPanel from './components/AuthPanel'
+import ReportForm from './components/ReportForm'
 import { authApi } from './services/api'
 import './App.css'
 
@@ -24,6 +25,16 @@ function App() {
   const [session, setSession] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [notice, setNotice] = useState('')
+  useEffect(() => {
+  if (!notice) return
+
+  const timeoutId = setTimeout(() => {
+    setNotice('')
+  }, 4000)
+
+  return () => clearTimeout(timeoutId)
+}, [notice])
+  const [reportOpen, setReportOpen] = useState(false)
 
   // Restore session when the application starts.
   useEffect(() => {
@@ -87,16 +98,17 @@ function App() {
     }
   }
 
-  function handleReportClick() {
-    if (authLoading) return
+function handleReportClick() {
+  if (authLoading) return
 
-    if (!session) {
-      openAuth()
-      return
-    }
-
-    setNotice('You are logged in. Report submission is coming next.')
+  if (!session) {
+    openAuth()
+    return
   }
+
+  setNotice('')
+  setReportOpen(true)
+}
 
   return (
     <div className="app">
@@ -265,10 +277,19 @@ function App() {
       </footer>
 
       {notice && (
-        <p className="app-notice" role="status">
-          {notice}
-        </p>
-      )}
+  <div className="app-notice" role="status" aria-live="polite">
+    <span>{notice}</span>
+
+    <button
+      type="button"
+      className="app-notice-dismiss"
+      onClick={() => setNotice('')}
+      aria-label="Dismiss notification"
+    >
+      &times;
+    </button>
+  </div>
+)}
 
       {authOpen && (
         <AuthPanel
@@ -276,6 +297,16 @@ function App() {
           onClose={() => setAuthOpen(false)}
         />
       )}
+      {reportOpen && (
+  <ReportForm
+    token={session.token}
+    onClose={() => setReportOpen(false)}
+    onReportCreated={(report) => {
+      setReportOpen(false)
+      setNotice(`Report #${report.id} submitted successfully.`)
+    }}
+  />
+)}
     </div>
   )
 }
