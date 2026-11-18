@@ -179,3 +179,39 @@ export const issueApi = {
   getEvidence: (id, token) =>
     apiRequest(`/issues/${id}/evidence`, { token }),
 };
+
+/**
+ * Authority / Admin APIs.
+ */
+export const adminApi = {
+  getStats: (token) =>
+    apiRequest('/admin/stats', { token }),
+
+  getOfficers: (token) =>
+    apiRequest('/admin/officers', { token }),
+
+  getDepartments: () =>
+    apiRequest('/departments'),
+
+  assignIssue: (issueId, { assigned_to, notes }, token) =>
+    apiRequest(`/issues/${issueId}/assign`, {
+      method: 'POST',
+      body: { assigned_to, notes },
+      token,
+    }),
+
+  updateStatus: (issueId, { status, note }, token) =>
+    apiRequest(`/issues/${issueId}/status`, {
+      method: 'PATCH',
+      body: { status, note },
+      token,
+    }),
+
+  uploadEvidence: (issueId, { image, description }, token) =>
+    apiRequest(`/issues/${issueId}/evidence`, {
+      method: 'POST',
+      body: { image, description },
+      token,
+    }),
+};
+

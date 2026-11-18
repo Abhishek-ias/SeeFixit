@@ -13,8 +13,9 @@ const reportUploadLimiter = require("../middleware/reportUploadLimiter");
 
 const {
     updateIssueStatusSchema,
+    assignIssueSchema,
     uploadEvidenceSchema,
-     issueFilterSchema
+    issueFilterSchema
 } = require("../validation/issueValidation");
 
 const {
@@ -26,7 +27,11 @@ const {
     getMyReportById,
     createReport,
     getIssueDetails,
-    getAllIssues
+    getAllIssues,
+    assignIssue,
+    getAdminStats,
+    getAllOfficers,
+    getDepartments
 } = require("../services/issueService");
 
 const {
@@ -399,27 +404,27 @@ router.get(
 
         try {
 
-           const page = req.query.page;
-const limit = req.query.limit;
-const search = req.query.search;
+            const page = req.query.page;
+            const limit = req.query.limit;
+            const search = req.query.search;
 
-const category = req.query.category;
-const status = req.query.status;
+            const category = req.query.category;
+            const status = req.query.status;
+            const department_id = req.query.department_id;
 
-const sortBy = req.query.sortBy;
-const order = req.query.order;
+            const sortBy = req.query.sortBy;
+            const order = req.query.order;
 
-
-
-const issues = await getAllIssues(
-    page,
-    limit,
-    search,
-    category,
-    status,
-    sortBy,
-    order
-);
+            const issues = await getAllIssues(
+                page,
+                limit,
+                search,
+                category,
+                status,
+                sortBy,
+                order,
+                department_id
+            );
 
             return sendSuccess(
                 res,
@@ -500,14 +505,16 @@ router.patch(
             const issueId = req.params.id;
 
             const {
-                status
+                status,
+                note
             } = req.body;
 
 
             const result = await updateIssueStatus(
                 issueId,
                 status,
-                req.user.userId
+                req.user.userId,
+                note
             );
 
 
@@ -516,6 +523,154 @@ router.patch(
                 200,
                 "Issue status updated successfully",
                 result
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// POST /api/issues/:id/assign
+// Assign CivicIssue to an officer
+// ADMIN ONLY
+// ======================================================
+
+router.post(
+    "/issues/:id/assign",
+    authenticateToken,
+    requireRole("ADMIN"),
+    validateId,
+    validate(assignIssueSchema),
+    async (req, res, next) => {
+
+        try {
+
+            const issueId = req.params.id;
+            const { assigned_to, notes } = req.body;
+
+            const result = await assignIssue(
+                issueId,
+                assigned_to,
+                req.user.userId,
+                notes
+            );
+
+            return sendSuccess(
+                res,
+                200,
+                "Issue assigned successfully",
+                result
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/admin/stats
+// Get aggregate statistics for authority dashboard
+// ADMIN ONLY
+// ======================================================
+
+router.get(
+    "/admin/stats",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+
+        try {
+
+            const stats = await getAdminStats();
+
+            return sendSuccess(
+                res,
+                200,
+                "Admin statistics fetched successfully",
+                stats
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/admin/officers
+// Get all officers available for assignment
+// ADMIN ONLY
+// ======================================================
+
+router.get(
+    "/admin/officers",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+
+        try {
+
+            const officers = await getAllOfficers();
+
+            return sendSuccess(
+                res,
+                200,
+                "Officers fetched successfully",
+                officers
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/departments
+// Get all departments
+// PUBLIC
+// ======================================================
+
+router.get(
+    "/departments",
+    async (req, res, next) => {
+
+        try {
+
+            const depts = await getDepartments();
+
+            return sendSuccess(
+                res,
+                200,
+                "Departments fetched successfully",
+                depts
             );
 
         }

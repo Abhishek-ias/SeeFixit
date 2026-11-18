@@ -12,6 +12,7 @@ import AuthPanel  from './components/AuthPanel'
 import ReportForm from './components/ReportForm'
 import MyReports  from './pages/MyReports'
 import IssueDetail from './pages/IssueDetail'
+import AdminDashboard from './pages/AdminDashboard'
 
 import { authApi } from './services/api'
 import './App.css'
@@ -125,6 +126,11 @@ function AppInner() {
           {session && (
             <Link to="/my-reports" className="nav-dashboard-link">
               My Reports
+            </Link>
+          )}
+          {session?.user?.role === 'ADMIN' && (
+            <Link to="/admin" className="nav-admin-link">
+              Authority Portal 🏛️
             </Link>
           )}
         </nav>
@@ -282,6 +288,18 @@ function AppInner() {
             element={
               <MyReports
                 token={session?.token}
+                onAuthRequired={handleAuthRequired}
+              />
+            }
+          />
+
+          {/* Authority / Admin portal */}
+          <Route
+            path="/admin"
+            element={
+              <AdminDashboard
+                token={session?.token}
+                user={session?.user}
                 onAuthRequired={handleAuthRequired}
               />
             }

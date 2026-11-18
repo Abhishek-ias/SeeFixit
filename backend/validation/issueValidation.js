@@ -2,8 +2,25 @@ const Joi = require("joi");
 
 const updateIssueStatusSchema = Joi.object({
     status: Joi.string()
-        .valid("OPEN", "IN_PROGRESS", "RESOLVED")
-        .required()
+        .valid("OPEN", "IN_PROGRESS", "ON_HOLD", "RESOLVED", "REJECTED", "REOPENED")
+        .required(),
+    note: Joi.string()
+        .trim()
+        .max(1000)
+        .allow("")
+        .optional()
+}).unknown(false);
+
+const assignIssueSchema = Joi.object({
+    assigned_to: Joi.number()
+        .integer()
+        .positive()
+        .required(),
+    notes: Joi.string()
+        .trim()
+        .max(1000)
+        .allow("")
+        .optional()
 }).unknown(false);
 
 const uploadEvidenceSchema = Joi.object({
@@ -31,7 +48,12 @@ const issueFilterSchema = Joi.object({
         .optional(),
 
     status: Joi.string()
-        .valid("OPEN", "IN_PROGRESS", "RESOLVED")
+        .valid("OPEN", "IN_PROGRESS", "ON_HOLD", "RESOLVED", "REJECTED", "REOPENED")
+        .optional(),
+
+    department_id: Joi.number()
+        .integer()
+        .positive()
         .optional(),
 
     page: Joi.number()
@@ -56,6 +78,7 @@ const issueFilterSchema = Joi.object({
 
 module.exports = {
     updateIssueStatusSchema,
+    assignIssueSchema,
     uploadEvidenceSchema,
     issueFilterSchema
 };

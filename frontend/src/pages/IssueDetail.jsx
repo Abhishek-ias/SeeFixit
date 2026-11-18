@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { reportApi, issueApi } from '../services/api'
+import { reportApi } from '../services/api'
 import './IssueDetail.css'
 
 const STATUS_CONFIG = {
@@ -66,7 +66,7 @@ function IssueDetail({ token, onAuthRequired }) {
 
     load()
     return () => { active = false }
-  }, [id, token])
+  }, [id, token, onAuthRequired])
 
   if (loading) {
     return (

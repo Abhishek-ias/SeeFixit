@@ -1,4 +1,4 @@
-﻿const multer = require("multer");
+const multer = require("multer");
 const AppError = require("../utils/AppError");
 const {
     MAX_IMAGE_BYTES

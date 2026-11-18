@@ -1,7 +1,7 @@
 const pool = require("../db/database");
 const AppError = require("../utils/AppError");
 
-async function updateIssueStatus(issueId, status, userId) {
+async function updateIssueStatus(issueId, status, userId, note = null) {
 
     const client = await pool.connect();
 
@@ -14,7 +14,10 @@ async function updateIssueStatus(issueId, status, userId) {
         const validStatuses = [
             "OPEN",
             "IN_PROGRESS",
-            "RESOLVED"
+            "ON_HOLD",
+            "RESOLVED",
+            "REJECTED",
+            "REOPENED"
         ];
 
         if (!validStatuses.includes(status)) {
@@ -56,7 +59,14 @@ async function updateIssueStatus(issueId, status, userId) {
 
         if (issue.status === "OPEN") {
 
-            if (status !== "IN_PROGRESS") {
+            if (status === "RESOLVED") {
+                throw new AppError(
+                    "OPEN issue can only move to IN_PROGRESS",
+                    400
+                );
+            }
+
+            if (!["IN_PROGRESS", "REJECTED"].includes(status)) {
                 throw new AppError(
                     "OPEN issue can only move to IN_PROGRESS",
                     400
@@ -67,7 +77,14 @@ async function updateIssueStatus(issueId, status, userId) {
 
         else if (issue.status === "IN_PROGRESS") {
 
-            if (status !== "RESOLVED") {
+            if (status === "OPEN") {
+                throw new AppError(
+                    "IN_PROGRESS issue can only move to RESOLVED",
+                    400
+                );
+            }
+
+            if (!["RESOLVED", "ON_HOLD", "REJECTED"].includes(status)) {
                 throw new AppError(
                     "IN_PROGRESS issue can only move to RESOLVED",
                     400
@@ -76,12 +93,54 @@ async function updateIssueStatus(issueId, status, userId) {
 
         }
 
+        else if (issue.status === "ON_HOLD") {
+
+            if (!["IN_PROGRESS", "REJECTED"].includes(status)) {
+                throw new AppError(
+                    "ON_HOLD issue can only move to IN_PROGRESS or REJECTED",
+                    400
+                );
+            }
+
+        }
+
         else if (issue.status === "RESOLVED") {
 
-            throw new AppError(
-                "Resolved issue cannot change status",
-                400
-            );
+            if (status === "IN_PROGRESS") {
+                throw new AppError(
+                    "Resolved issue cannot change status",
+                    400
+                );
+            }
+
+            if (status !== "REOPENED") {
+                throw new AppError(
+                    "Resolved issue cannot change status",
+                    400
+                );
+            }
+
+        }
+
+        else if (issue.status === "REJECTED") {
+
+            if (status !== "REOPENED") {
+                throw new AppError(
+                    "Rejected issue can only move to REOPENED",
+                    400
+                );
+            }
+
+        }
+
+        else if (issue.status === "REOPENED") {
+
+            if (!["IN_PROGRESS", "REJECTED"].includes(status)) {
+                throw new AppError(
+                    "Reopened issue can only move to IN_PROGRESS or REJECTED",
+                    400
+                );
+            }
 
         }
 
@@ -91,7 +150,7 @@ async function updateIssueStatus(issueId, status, userId) {
         // ------------------------------------------
 
         if (
-            issue.status === "IN_PROGRESS" &&
+            (issue.status === "IN_PROGRESS" || issue.status === "REOPENED") &&
             status === "RESOLVED"
         ) {
 
@@ -151,9 +210,10 @@ async function updateIssueStatus(issueId, status, userId) {
             INSERT INTO issue_status_history (
                 civic_issue_id,
                 status,
-                changed_by
+                changed_by,
+                note
             )
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, $3, $4)
             RETURNING *;
         `;
 
@@ -162,7 +222,30 @@ async function updateIssueStatus(issueId, status, userId) {
             [
                 issueId,
                 status,
-                userId
+                userId,
+                note || null
+            ]
+        );
+
+        // Record in audit_logs
+        await client.query(
+            `INSERT INTO audit_logs (
+                entity_type,
+                entity_id,
+                action,
+                performed_by,
+                details
+            ) VALUES ($1, $2, $3, $4, $5)`,
+            [
+                "CIVIC_ISSUE",
+                issueId,
+                "STATUS_CHANGE",
+                userId,
+                JSON.stringify({
+                    old_status: issue.status,
+                    new_status: status,
+                    note: note || null
+                })
             ]
         );
 
@@ -221,7 +304,8 @@ async function getIssueHistory(issueId) {
             issue_status_history.changed_by,
             users.name AS changed_by_name,
             issue_status_history.changed_at,
-            issue_status_history.evidence
+            issue_status_history.evidence,
+            issue_status_history.note
         FROM issue_status_history
         JOIN users
             ON issue_status_history.changed_by = users.id
@@ -781,12 +865,56 @@ async function getIssueDetails(issueId) {
         [issueId]
     );
 
+    const assignmentsQuery = `
+        SELECT
+            ia.id,
+            ia.civic_issue_id,
+            ia.assigned_to,
+            u_to.name AS assigned_to_name,
+            u_to.email AS assigned_to_email,
+            ia.assigned_by,
+            u_by.name AS assigned_by_name,
+            ia.notes,
+            ia.assigned_at
+        FROM issue_assignments ia
+        JOIN users u_to ON ia.assigned_to = u_to.id
+        JOIN users u_by ON ia.assigned_by = u_by.id
+        WHERE ia.civic_issue_id = $1
+        ORDER BY ia.assigned_at DESC;
+    `;
+
+    const assignmentsResult = await pool.query(
+        assignmentsQuery,
+        [issueId]
+    );
+
+    const auditQuery = `
+        SELECT
+            al.id,
+            al.action,
+            al.performed_by,
+            u.name AS performed_by_name,
+            al.details,
+            al.created_at
+        FROM audit_logs al
+        JOIN users u ON al.performed_by = u.id
+        WHERE al.entity_type = 'CIVIC_ISSUE' AND al.entity_id = $1
+        ORDER BY al.created_at DESC;
+    `;
+
+    const auditResult = await pool.query(
+        auditQuery,
+        [issueId]
+    );
+
 
     return {
         issue: issueResult.rows[0],
         reports: reportsResult.rows,
         history: historyResult.rows,
-        evidence: evidenceResult.rows
+        evidence: evidenceResult.rows,
+        assignments: assignmentsResult.rows,
+        auditLogs: auditResult.rows
     };
 
 }
@@ -803,7 +931,8 @@ async function getAllIssues(
     category,
     status,
     sortBy,
-    order
+    order,
+    departmentId
 ) {
 
     page = Number(page);
@@ -833,48 +962,46 @@ async function getAllIssues(
     const offset = (page - 1) * limit;
 
     const sortColumns = {
-    id: "civic_issues.id",
-    priority_score: "civic_issues.priority_score",
-    report_count: "COUNT(reports.id)"
-};
+        id: "civic_issues.id",
+        priority_score: "civic_issues.priority_score",
+        report_count: "COUNT(reports.id)"
+    };
 
-const sortColumn =
-    sortColumns[sortBy] || "civic_issues.id";
+    const sortColumn =
+        sortColumns[sortBy] || "civic_issues.id";
 
-const sortOrder =
-    order === "desc" ? "DESC" : "ASC";
+    const sortOrder =
+        order === "desc" ? "DESC" : "ASC";
 
     const conditions = [];
     const filterValues = [];
 
     if (search) {
-
-    filterValues.push(`%${search}%`);
-
-    conditions.push(
-        `civic_issues.title ILIKE $${filterValues.length}`
-    );
-
-}
+        filterValues.push(`%${search}%`);
+        conditions.push(
+            `civic_issues.title ILIKE $${filterValues.length}`
+        );
+    }
 
     if (category) {
-
         filterValues.push(category);
-
         conditions.push(
             `civic_issues.category = $${filterValues.length}`
         );
-
     }
 
     if (status) {
-
         filterValues.push(status);
-
         conditions.push(
             `civic_issues.status = $${filterValues.length}`
         );
+    }
 
+    if (departmentId) {
+        filterValues.push(Number(departmentId));
+        conditions.push(
+            `civic_issues.department_id = $${filterValues.length}`
+        );
     }
 
     const whereClause =
@@ -898,8 +1025,17 @@ const sortOrder =
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
+            civic_issues.latitude,
+            civic_issues.longitude,
+            civic_issues.department_id,
             departments.name AS department_name,
-            COUNT(reports.id) AS report_count
+            COUNT(reports.id) AS report_count,
+            (
+                SELECT u.name FROM issue_assignments ia
+                JOIN users u ON ia.assigned_to = u.id
+                WHERE ia.civic_issue_id = civic_issues.id
+                ORDER BY ia.assigned_at DESC LIMIT 1
+            ) AS assigned_to_name
         FROM civic_issues
         JOIN departments
             ON civic_issues.department_id = departments.id
@@ -912,6 +1048,9 @@ const sortOrder =
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
+            civic_issues.latitude,
+            civic_issues.longitude,
+            civic_issues.department_id,
             departments.name
         ORDER BY ${sortColumn} ${sortOrder}, civic_issues.id ASC
         LIMIT $${limitParameter}
@@ -935,24 +1074,173 @@ const sortOrder =
     );
 
     const total = Number(
-    countResult.rows[0].total
-);
+        countResult.rows[0].total
+    );
 
-const issues = result.rows.map(issue => ({
-    ...issue,
-    report_count: Number(issue.report_count)
-}));
+    const issues = result.rows.map(issue => ({
+        ...issue,
+        report_count: Number(issue.report_count)
+    }));
 
-return {
-    issues,
-    pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
+    return {
+        issues,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit)
+        }
+    };
+
+}
+
+
+// ======================================================
+// AUTHORITY & ASSIGNMENT SERVICES
+// ======================================================
+
+async function assignIssue(issueId, assignedToUserId, assignedByUserId, notes = null) {
+
+    const issueCheck = await pool.query(
+        "SELECT id, title FROM civic_issues WHERE id = $1",
+        [issueId]
+    );
+
+    if (issueCheck.rows.length === 0) {
+        throw new AppError("CivicIssue not found", 404);
     }
-};
 
+    const userCheck = await pool.query(
+        "SELECT id, name, role FROM users WHERE id = $1",
+        [assignedToUserId]
+    );
+
+    if (userCheck.rows.length === 0) {
+        throw new AppError("Assigned user not found", 404);
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const insertQuery = `
+            INSERT INTO issue_assignments (
+                civic_issue_id,
+                assigned_to,
+                assigned_by,
+                notes
+            )
+            VALUES ($1, $2, $3, $4)
+            RETURNING *;
+        `;
+
+        const result = await client.query(
+            insertQuery,
+            [issueId, assignedToUserId, assignedByUserId, notes]
+        );
+
+        // Record in audit_logs
+        await client.query(
+            `INSERT INTO audit_logs (
+                entity_type,
+                entity_id,
+                action,
+                performed_by,
+                details
+            ) VALUES ($1, $2, $3, $4, $5)`,
+            [
+                "CIVIC_ISSUE",
+                issueId,
+                "ASSIGNED",
+                assignedByUserId,
+                JSON.stringify({
+                    assigned_to: assignedToUserId,
+                    assigned_to_name: userCheck.rows[0].name,
+                    notes: notes || null
+                })
+            ]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+            ...result.rows[0],
+            assigned_to_name: userCheck.rows[0].name
+        };
+    }
+    catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (e) {}
+        throw error;
+    }
+    finally {
+        client.release();
+    }
+}
+
+async function getAdminStats() {
+
+    const statusResult = await pool.query(`
+        SELECT status, COUNT(*)::int AS count
+        FROM civic_issues
+        GROUP BY status;
+    `);
+
+    const categoryResult = await pool.query(`
+        SELECT category, COUNT(*)::int AS count
+        FROM civic_issues
+        GROUP BY category;
+    `);
+
+    const deptResult = await pool.query(`
+        SELECT d.id, d.name, COUNT(ci.id)::int AS count
+        FROM departments d
+        LEFT JOIN civic_issues ci ON ci.department_id = d.id
+        GROUP BY d.id, d.name
+        ORDER BY d.id ASC;
+    `);
+
+    const totalsResult = await pool.query(`
+        SELECT
+            (SELECT COUNT(*)::int FROM civic_issues) AS total_issues,
+            (SELECT COUNT(*)::int FROM reports) AS total_reports,
+            (SELECT COUNT(*)::int FROM users WHERE role = 'CITIZEN') AS total_citizens,
+            (SELECT COUNT(*)::int FROM users WHERE role = 'ADMIN') AS total_officers,
+            (SELECT COUNT(*)::int FROM civic_issues WHERE status = 'RESOLVED') AS resolved_issues,
+            (SELECT COUNT(*)::int FROM civic_issues WHERE status IN ('OPEN', 'IN_PROGRESS', 'REOPENED')) AS active_issues;
+    `);
+
+    return {
+        totals: totalsResult.rows[0],
+        byStatus: statusResult.rows,
+        byCategory: categoryResult.rows,
+        byDepartment: deptResult.rows
+    };
+}
+
+async function getAllOfficers() {
+
+    const result = await pool.query(`
+        SELECT id, name, email, role
+        FROM users
+        WHERE role = 'ADMIN'
+        ORDER BY name ASC;
+    `);
+
+    return result.rows;
+}
+
+async function getDepartments() {
+
+    const result = await pool.query(`
+        SELECT id, name
+        FROM departments
+        ORDER BY id ASC;
+    `);
+
+    return result.rows;
 }
 
 module.exports = {
@@ -964,5 +1252,9 @@ module.exports = {
     getMyReportById,
     createReport,
     getIssueDetails,
-    getAllIssues
+    getAllIssues,
+    assignIssue,
+    getAdminStats,
+    getAllOfficers,
+    getDepartments
 };

@@ -69,7 +69,7 @@ function MyReports({ token, onAuthRequired }) {
     load()
 
     return () => { active = false }
-  }, [token])
+  }, [token, onAuthRequired])
 
   const filtered = filter === 'ALL'
     ? reports
