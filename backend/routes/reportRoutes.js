@@ -8,6 +8,8 @@ const authenticateToken = require("../middleware/authMiddleware");
 const requireRole = require("../middleware/requireRole");
 const validate = require("../middleware/validate");
 const validateId = require("../middleware/validateId");
+const uploadReportImage = require("../middleware/reportImageUpload");
+const reportUploadLimiter = require("../middleware/reportUploadLimiter");
 
 const {
     updateIssueStatusSchema,
@@ -35,6 +37,10 @@ const {
 const {
     createReportSchema
 } = require("../validation/reportValidation");
+
+const { processReportImage } = require("../services/reportImageProcessor");
+const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
+const { isConfigured: cloudinaryConfigured } = require("../config/cloudinary");
 
 const AppError = require("../utils/AppError");
 
@@ -109,22 +115,57 @@ const AppError = require("../utils/AppError");
 
 router.post(
     "/reports",
-    validate(createReportSchema),
     authenticateToken,
     requireRole("CITIZEN", "ADMIN"),
+    reportUploadLimiter,
+    uploadReportImage,
     async (req, res, next) => {
 
         try {
 
-            const {
+            // Parse text fields from multipart form
+            const title       = req.body.title;
+            const description = req.body.description;
+            const category    = req.body.category;
+            const latitude    = Number(req.body.latitude);
+            const longitude   = Number(req.body.longitude);
+
+            // Manual validation (Joi validate middleware can't run before multer on multipart)
+            const { error } = createReportSchema.validate({
                 title,
                 description,
                 category,
                 latitude,
-                longitude,
-                image
-            } = req.body;
+                longitude
+            });
 
+            if (error) {
+                return next(
+                    new AppError(error.details[0].message, 400)
+                );
+            }
+
+            // Process and upload image if provided
+            let attachment = null;
+
+            if (req.file) {
+                const processed = await processReportImage(req.file);
+
+                const uploaded = await uploadToCloudinary(processed.buffer);
+
+                attachment = {
+                    originalFilename:    processed.originalFilename,
+                    originalMimeType:    processed.originalMimeType,
+                    mimeType:            processed.mimeType,
+                    originalFileSizeBytes: processed.originalFileSizeBytes,
+                    fileSizeBytes:       processed.fileSizeBytes,
+                    width:               uploaded.width,
+                    height:              uploaded.height,
+                    sha256:              processed.sha256,
+                    secureUrl:           uploaded.secureUrl,
+                    publicId:            uploaded.publicId
+                };
+            }
 
             const report = await createReport(
                 req.user.userId,
@@ -133,9 +174,9 @@ router.post(
                 category,
                 latitude,
                 longitude,
-                image
+                null,       // legacy image field — unused
+                attachment
             );
-
 
             return sendSuccess(
                 res,
@@ -159,6 +200,95 @@ router.post(
 // ======================================================
 // CIVIC ISSUES
 // ======================================================
+
+// ======================================================
+// GET /api/issues/nearby
+// Find nearby open civic issues for duplicate warning
+// PUBLIC
+// lat, lng, category required; radius optional (metres, default 200)
+// ======================================================
+
+router.get(
+    "/issues/nearby",
+    async (req, res, next) => {
+
+        try {
+
+            const lat      = Number(req.query.lat);
+            const lng      = Number(req.query.lng);
+            const category = req.query.category;
+            const radius   = Math.min(Number(req.query.radius) || 200, 1000); // max 1 km
+
+            if (
+                !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+                !Number.isFinite(lng) || lng < -180 || lng > 180
+            ) {
+                return next(new AppError("Valid lat and lng are required", 400));
+            }
+
+            const validCategories = ["ROAD", "SANITATION", "WATER", "LIGHTING"];
+
+            if (category && !validCategories.includes(category)) {
+                return next(new AppError("Invalid category", 400));
+            }
+
+            // Approximate degree-based radius (~111 km per degree latitude)
+            const degreeRadius = radius / 111000;
+
+            const conditions = [
+                `latitude  BETWEEN $1 AND $2`,
+                `longitude BETWEEN $3 AND $4`,
+                `status != 'RESOLVED'`
+            ];
+            const values = [
+                lat - degreeRadius,
+                lat + degreeRadius,
+                lng - degreeRadius,
+                lng + degreeRadius
+            ];
+
+            if (category) {
+                values.push(category);
+                conditions.push(`category = $${values.length}`);
+            }
+
+            const query = `
+                SELECT
+                    id         AS issue_id,
+                    title      AS issue_title,
+                    category,
+                    status,
+                    latitude,
+                    longitude,
+                    report_count,
+                    priority_score
+                FROM civic_issues
+                WHERE ${conditions.join(" AND ")}
+                ORDER BY
+                    (latitude - $1)*(latitude - $1) + (longitude - $3)*(longitude - $3) ASC
+                LIMIT 5;
+            `;
+
+            const result = await pool.query(query, values);
+
+            return sendSuccess(
+                res,
+                200,
+                "Nearby issues fetched successfully",
+                result.rows
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
 
 // ======================================================
 // GET /api/issues

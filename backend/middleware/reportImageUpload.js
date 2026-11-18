@@ -72,12 +72,8 @@ function uploadReportImage(req, res, next) {
         }
 
         if (!req.file) {
-            return next(
-                new AppError(
-                    "An image file is required",
-                    400
-                )
-            );
+            // Image is optional — continue without file
+            return next();
         }
 
         next();

@@ -11,14 +11,15 @@ let refreshPromise = null;
  */
 export async function apiRequest(
   path,
-  { method = 'GET', body, token, headers = {} } = {}
+  { method = 'GET', body, token, headers = {}, isFormData = false } = {}
 ) {
   const requestHeaders = {
     Accept: 'application/json',
     ...headers,
   };
 
-  if (body !== undefined) {
+  // Don't set Content-Type for FormData — browser sets it with boundary
+  if (body !== undefined && !isFormData) {
     requestHeaders['Content-Type'] = 'application/json';
   }
 
@@ -33,7 +34,11 @@ export async function apiRequest(
       method,
       headers: requestHeaders,
       credentials: 'include',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: isFormData
+        ? body
+        : body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
     });
   } catch {
     throw new Error('Unable to connect to SeeFixit server.');
@@ -104,10 +109,73 @@ export const authApi = {
  * Citizen report APIs.
  */
 export const reportApi = {
-  create: (reportData, token) =>
-    apiRequest('/reports', {
+  /**
+   * Create a report. Sends multipart/form-data so image is included.
+   */
+  create: (fields, token) => {
+    const formData = new FormData();
+    formData.append('title', fields.title);
+    formData.append('description', fields.description);
+    formData.append('category', fields.category);
+    formData.append('latitude', String(fields.latitude));
+    formData.append('longitude', String(fields.longitude));
+
+    if (fields.image) {
+      formData.append('image', fields.image);
+    }
+
+    return apiRequest('/reports', {
       method: 'POST',
-      body: reportData,
+      body: formData,
       token,
-    }),
+      isFormData: true,
+    });
+  },
+
+  /**
+   * Get the logged-in citizen's reports.
+   */
+  getMyReports: (token) =>
+    apiRequest('/my-reports', { token }),
+
+  /**
+   * Get one of the logged-in citizen's reports.
+   */
+  getMyReport: (id, token) =>
+    apiRequest(`/my-reports/${id}`, { token }),
+
+  /**
+   * Find nearby open issues for duplicate warning.
+   */
+  getNearby: ({ lat, lng, category }) => {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+    });
+    if (category) params.set('category', category);
+    return apiRequest(`/issues/nearby?${params.toString()}`);
+  },
+};
+
+/**
+ * Public issue APIs.
+ */
+export const issueApi = {
+  getAll: (params = {}) => {
+    const query = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+      )
+    ).toString();
+    return apiRequest(`/issues${query ? `?${query}` : ''}`);
+  },
+
+  getById: (id, token) =>
+    apiRequest(`/issues/${id}`, { token }),
+
+  getHistory: (id, token) =>
+    apiRequest(`/issues/${id}/history`, { token }),
+
+  getEvidence: (id, token) =>
+    apiRequest(`/issues/${id}/evidence`, { token }),
 };

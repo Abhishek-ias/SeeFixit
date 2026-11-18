@@ -398,7 +398,8 @@ async function createReport(
     category,
     latitude,
     longitude,
-    image
+    image,
+    attachment   // optional: { originalFilename, originalMimeType, mimeType, originalFileSizeBytes, fileSizeBytes, width, height, sha256, secureUrl, publicId }
 ) {
 
     // ------------------------------------------
@@ -591,13 +592,72 @@ const departmentId =
 
 
         // ------------------------------------------
+        // Save attachment record (if image was uploaded)
+        // ------------------------------------------
+
+        let attachmentRow = null;
+
+        if (attachment) {
+
+            const insertAttachmentQuery = `
+                INSERT INTO report_attachments (
+                    report_id,
+                    uploaded_by,
+                    storage_provider,
+                    object_key,
+                    original_filename,
+                    original_mime_type,
+                    mime_type,
+                    original_file_size_bytes,
+                    file_size_bytes,
+                    width,
+                    height,
+                    sha256,
+                    status
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'READY')
+                RETURNING id;
+            `;
+
+            const insertAttachmentValues = [
+                reportResult.rows[0].id,
+                userId,
+                "cloudinary",
+                attachment.publicId,
+                attachment.originalFilename,
+                attachment.originalMimeType,
+                attachment.mimeType,
+                attachment.originalFileSizeBytes,
+                attachment.fileSizeBytes,
+                attachment.width,
+                attachment.height,
+                attachment.sha256
+            ];
+
+            const attachmentResult = await client.query(
+                insertAttachmentQuery,
+                insertAttachmentValues
+            );
+
+            attachmentRow = {
+                id: attachmentResult.rows[0].id,
+                url: attachment.secureUrl
+            };
+
+        }
+
+
+        // ------------------------------------------
         // Commit transaction
         // ------------------------------------------
 
         await client.query("COMMIT");
 
 
-        return reportResult.rows[0];
+        return {
+            ...reportResult.rows[0],
+            attachment: attachmentRow
+        };
 
     }
 
