@@ -35,7 +35,11 @@ const {
     getMapIssues,
     submitResolutionFeedback,
     getResolutionFeedback,
-    reopenIssueByCitizen
+    reopenIssueByCitizen,
+    getCategories,
+    createCategory,
+    updateCategory,
+    getMunicipalAnalytics
 } = require("../services/issueService");
 
 const {
@@ -1165,6 +1169,85 @@ router.patch(
         try {
             await markAllNotificationsAsRead(req.user.userId);
             return sendSuccess(res, 200, "All notifications marked as read");
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ======================================================
+// CATEGORIES & SLA CONFIGURATION
+// ======================================================
+
+router.get("/categories", async (req, res, next) => {
+    try {
+        const includeInactive = req.query.all === "true";
+        const categories = await getCategories(includeInactive);
+        return sendSuccess(res, 200, "Categories fetched successfully", categories);
+    } catch (err) {
+        next(err);
+    }
+});
+
+router.post(
+    "/admin/categories",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const { code, name, description, icon, department_id, sla_hours } = req.body;
+            if (!code || !name || !department_id) {
+                return sendError(res, 400, "code, name, and department_id are required");
+            }
+            const created = await createCategory({
+                code,
+                name,
+                description,
+                icon,
+                departmentId: department_id,
+                slaHours: sla_hours
+            });
+            return sendSuccess(res, 201, "Category created successfully", created);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.patch(
+    "/admin/categories/:code",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const { name, description, icon, department_id, sla_hours, is_active } = req.body;
+            const updated = await updateCategory(req.params.code, {
+                name,
+                description,
+                icon,
+                departmentId: department_id,
+                slaHours: sla_hours,
+                isActive: is_active
+            });
+            return sendSuccess(res, 200, "Category updated successfully", updated);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ======================================================
+// MUNICIPAL ANALYTICS & SLA PERFORMANCE
+// ======================================================
+
+router.get(
+    "/admin/analytics",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const analytics = await getMunicipalAnalytics();
+            return sendSuccess(res, 200, "Municipal analytics fetched successfully", analytics);
         } catch (err) {
             next(err);
         }

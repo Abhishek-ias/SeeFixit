@@ -367,6 +367,32 @@ function AdminDashboard({ token, user, onAuthRequired }) {
         </div>
       )}
 
+      {/* ── SLA & Municipal Insights Bar ── */}
+      {stats?.slaMetrics && (
+        <div className="sla-insights-bar">
+          <div className="sla-metric-pill">
+            <span className="sla-pill-label">⚡ Active On-Schedule:</span>
+            <strong className="sla-pill-value">{stats.slaMetrics.on_schedule ?? 0}</strong>
+          </div>
+          <div className="sla-metric-pill overdue-pill">
+            <span className="sla-pill-label">🚨 Overdue Issues:</span>
+            <strong className="sla-pill-value">{stats.slaMetrics.currently_overdue ?? 0} breached</strong>
+          </div>
+          <div className="sla-metric-pill">
+            <span className="sla-pill-label">⏱️ Avg Resolution:</span>
+            <strong className="sla-pill-value">
+              {stats.slaMetrics.avg_resolution_hours ? `${stats.slaMetrics.avg_resolution_hours}h` : 'N/A'}
+            </strong>
+          </div>
+          <div className="sla-metric-pill rating-pill">
+            <span className="sla-pill-label">⭐ Citizen Rating:</span>
+            <strong className="sla-pill-value">
+              {stats.citizenSatisfaction?.average_rating ? `${stats.citizenSatisfaction.average_rating} / 5` : 'No reviews yet'}
+            </strong>
+          </div>
+        </div>
+      )}
+
       {/* ── Filter Bar ── */}
       <div className="admin-filter-bar">
         <div className="filter-item filter-search">
@@ -443,6 +469,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                 <th>Department</th>
                 <th>Assigned Officer</th>
                 <th>Status</th>
+                <th>SLA Timer</th>
                 <th>Reports</th>
                 <th>Actions</th>
               </tr>
@@ -457,7 +484,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                       <strong>{issue.issue_title}</strong>
                       <span className="cell-coords">📍 {Number(issue.latitude).toFixed(4)}, {Number(issue.longitude).toFixed(4)}</span>
                     </td>
-                    <td><span className="category-pill">{issue.category}</span></td>
+                    <td><span className="category-pill">{issue.category_icon ? `${issue.category_icon} ` : ''}{issue.category}</span></td>
                     <td>{issue.department_name || '—'}</td>
                     <td>
                       {issue.assigned_to_name ? (
@@ -473,6 +500,29 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                       >
                         {statusCfg.icon} {statusCfg.label}
                       </span>
+                    </td>
+                    <td>
+                      {issue.sla_status === 'WITHIN_SLA' && (
+                        <span className="sla-badge-pill within-sla" title={`${issue.sla_hours_remaining} hours remaining`}>
+                          🟢 {issue.sla_hours_remaining}h left
+                        </span>
+                      )}
+                      {issue.sla_status === 'OVERDUE' && (
+                        <span className="sla-badge-pill overdue" title={`Overdue by ${Math.abs(issue.sla_hours_remaining)} hours`}>
+                          🔴 Overdue {Math.abs(issue.sla_hours_remaining)}h
+                        </span>
+                      )}
+                      {issue.sla_status === 'SLA_MET' && (
+                        <span className="sla-badge-pill sla-met" title="Resolved within target SLA">
+                          ✅ Met SLA
+                        </span>
+                      )}
+                      {issue.sla_status === 'SLA_BREACHED' && (
+                        <span className="sla-badge-pill sla-breached" title="Resolution exceeded target SLA">
+                          ⚠️ Breached
+                        </span>
+                      )}
+                      {!issue.sla_status && <span className="sla-badge-pill">72h SLA</span>}
                     </td>
                     <td>
                       <span className="reports-counter">{issue.report_count}</span>

@@ -222,6 +222,9 @@ export const adminApi = {
       body: { image, description },
       token,
     }),
+
+  getAnalytics: (token) =>
+    apiRequest('/admin/analytics', { token }),
 };
 
 /**
@@ -280,6 +283,28 @@ export const notificationApi = {
   markAllRead: (token) =>
     apiRequest('/notifications/read-all', {
       method: 'PATCH',
+      token,
+    }),
+};
+
+/**
+ * Configurable Categories & SLA APIs.
+ */
+export const categoryApi = {
+  getAll: (includeAll = false) =>
+    apiRequest(`/categories${includeAll ? '?all=true' : ''}`),
+
+  create: (categoryData, token) =>
+    apiRequest('/admin/categories', {
+      method: 'POST',
+      body: categoryData,
+      token,
+    }),
+
+  update: (code, fields, token) =>
+    apiRequest(`/admin/categories/${code}`, {
+      method: 'PATCH',
+      body: fields,
       token,
     }),
 };

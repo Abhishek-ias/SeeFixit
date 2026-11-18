@@ -1,9 +1,9 @@
 
 import { useState, useRef, useEffect } from 'react'
-import { reportApi, aiApi } from '../services/api'
+import { reportApi, aiApi, categoryApi } from '../services/api'
 import './ReportForm.css'
 
-const categories = [
+const DEFAULT_CATEGORIES = [
   { value: 'ROAD',       label: 'Roads & Potholes' },
   { value: 'SANITATION', label: 'Sanitation' },
   { value: 'WATER',      label: 'Water Supply' },
@@ -27,7 +27,7 @@ function validateField(field, value) {
     if (trimmedValue.length > 1000) return 'Description cannot exceed 1000 characters.'
   }
 
-  if (field === 'category' && !categories.some((c) => c.value === value)) {
+  if (field === 'category' && !trimmedValue) {
     return 'Please select a valid issue category.'
   }
 
@@ -63,6 +63,31 @@ function ReportForm({ token, onClose, onReportCreated }) {
 
   // AI assistant state
   const [aiSuggestion, setAiSuggestion] = useState(null)
+
+  // Dynamic configurable categories state
+  const [availableCategories, setAvailableCategories] = useState(DEFAULT_CATEGORIES)
+
+  useEffect(() => {
+    let active = true
+    async function loadCategories() {
+      try {
+        const res = await categoryApi.getAll()
+        if (active && res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          setAvailableCategories(
+            res.data.map((c) => ({
+              value: c.code,
+              label: c.name,
+              icon: c.icon
+            }))
+          )
+        }
+      } catch {
+        // Fallback to DEFAULT_CATEGORIES
+      }
+    }
+    loadCategories()
+    return () => { active = false }
+  }, [])
 
   // ── field helpers ───────────────────────────────────────
   function updateField(field, value) {
@@ -405,7 +430,7 @@ function ReportForm({ token, onClose, onReportCreated }) {
                     className="ai-apply-btn"
                     onClick={() => updateField('category', aiSuggestion.predictedCategory)}
                   >
-                    Switch to {categories.find(c => c.value === aiSuggestion.predictedCategory)?.label} →
+                    Switch to {availableCategories.find(c => c.value === aiSuggestion.predictedCategory)?.label || aiSuggestion.predictedCategory} →
                   </button>
                 )}
               </div>
@@ -419,8 +444,10 @@ function ReportForm({ token, onClose, onReportCreated }) {
               required
               aria-invalid={Boolean(errors.category)}
             >
-              {categories.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+              {availableCategories.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.icon ? `${c.icon} ` : ''}{c.label}
+                </option>
               ))}
             </select>
             {errors.category && <p className="report-error" role="alert">{errors.category}</p>}

@@ -147,6 +147,93 @@
   color: #9ca3af;
 }
 
+/* ── SLA & Municipal Insights Bar ──────────────────── */
+
+.sla-insights-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.75rem 1.25rem;
+}
+
+.sla-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #334155;
+  background: white;
+  border: 1px solid #cbd5e1;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+}
+
+.sla-metric-pill.overdue-pill {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.sla-metric-pill.rating-pill {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.sla-pill-label {
+  font-weight: 500;
+}
+
+.sla-pill-value {
+  font-weight: 700;
+}
+
+/* ── SLA Badges in Table ───────────────────────────── */
+
+.sla-badge-pill {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sla-badge-pill.within-sla {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.sla-badge-pill.overdue {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  animation: pulse-overdue 2s infinite;
+}
+
+.sla-badge-pill.sla-met {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.sla-badge-pill.sla-breached {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+@keyframes pulse-overdue {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
 /* Filter bar */
 .admin-filter-bar {
   display: flex;

@@ -1,7 +1,7 @@
 # SeeFixit — Master Project Status
 > Last updated: 2026-11-19 | Based on verified codebase audit
 
-## Current Phase: P0, P1, P2 & P3 Completed → Production & Pilot Ready
+## Current Phase: P0, P1, P2 & P3 Completed + Dynamic Categories & SLA Engine Active
 
 ---
 
@@ -11,15 +11,16 @@
 |----------|-------|
 | Repository | https://github.com/Abhishek-ias/SeeFixit |
 | Local Root | `C:\SeeFixit` |
-| Latest Migrations (Neon DB) | `000` through `014` completely applied & verified |
+| Latest Migrations (Neon DB & Local) | `000` through `016` completely applied & verified |
+| Dynamic Categories & SLA | ✅ Configurable `categories` table with custom SLA thresholds, dynamic form options & admin SLA badges |
 | Spatial Intelligence | ✅ PostGIS fallback + earthdistance & cube extensions, bounding box & spatial indexes active |
 | AI Intelligence | ✅ Rule-based & LLM-ready civic ontology classifier, hazard detector, severity scoring, resolution verification |
 | Citizen Experience | ✅ GPS capture, image upload pipeline, duplicate detection modal, citizen dashboard, resolution rating & dispute |
-| Authority Operations | ✅ Multi-status machine, officer assignments, audit logs, KPI metrics, triage modal, resolution evidence |
+| Authority Operations | ✅ Multi-status machine, officer assignments, audit logs, KPI metrics, triage modal, resolution evidence, SLA timers |
 | Citizen Engagement | ✅ Real-time in-app notification center, unread badges, resolution rating (1-5 stars), dispute reopening |
 | Standards & Interoperability | ✅ Open311 GeoReport v2 endpoints (`/services.json` and `/requests.json`) |
 | Production Infrastructure | ✅ Dockerfile (backend & frontend), Nginx SPA routing, docker-compose.yml, GitHub Actions CI workflow |
-| Automated Test Suites | ✅ 12/12 unit tests pass, 9/9 integration tests pass |
+| Automated Test Suites | ✅ 12/12 unit tests pass, 12/12 integration tests pass |
 | Frontend Verification | ✅ 0 warnings, 0 errors, Vite production build passes in ~350ms |
 
 ---
@@ -29,7 +30,7 @@
 ### P0 Checklist (Audit & Stabilise) — 100% COMPLETE
 - [x] Full codebase audit completed and documented (`SeeFixit_Master_Audit_Nov19.md`)
 - [x] Staged, reconciled, and committed Day 83 changes
-- [x] Migrations 008, 009, 010, 011, 012, 013, 014 applied to Neon DB
+- [x] Migrations 008 through 016 applied to Neon DB and local DB
 - [x] Cloudinary configuration verified with environment fallback
 - [x] All backend unit and integration tests passing
 - [x] Frontend lint and build clean
@@ -60,3 +61,6 @@
 - [x] P3.2: GitHub Actions CI workflow (`.github/workflows/ci.yml`)
 - [x] P3.3: Production containerization (`backend/Dockerfile`, `frontend/Dockerfile`, `frontend/nginx.conf`, `docker-compose.yml`)
 - [x] P3.4: Foreign key cascade integrity verified across audit logs and assignments (Migration 013)
+- [x] P3.5: Configurable category management & department mapping (`categories` table, Migration 015)
+- [x] P3.6: Municipal SLA countdown timers (`Within SLA`, `Overdue`, `SLA Met`, `SLA Breached`)
+- [x] P3.7: Temporal audit tracking (`created_at` & `updated_at` timestamps on issues, Migration 016)

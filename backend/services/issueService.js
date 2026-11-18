@@ -186,12 +186,15 @@ async function updateIssueStatus(issueId, status, userId, note = null) {
 
 
         // ------------------------------------------
-        // Update issue
+        // Update issue and maintain resolved_at timestamp
         // ------------------------------------------
 
         const updateQuery = `
             UPDATE civic_issues
-            SET status = $1
+            SET
+                status = $1,
+                resolved_at = ${status === 'RESOLVED' ? 'CURRENT_TIMESTAMP' : (status === 'REOPENED' ? 'NULL' : 'resolved_at')},
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = $2
             RETURNING *;
         `;
@@ -503,30 +506,7 @@ async function createReport(
     attachment   // optional: { originalFilename, originalMimeType, mimeType, originalFileSizeBytes, fileSizeBytes, width, height, sha256, secureUrl, publicId }
 ) {
 
-    // ------------------------------------------
-    // Decide department
-    // ------------------------------------------
-
-    const departmentNames = {
-    ROAD: "Road Department",
-    SANITATION: "Sanitation Department",
-    WATER: "Water Department",
-    LIGHTING: "Street Lighting Department"
-};
-
-const departmentName = departmentNames[category];
-
-if (!departmentName) {
-
-    throw new AppError(
-        "Invalid category",
-        400
-    );
-
-}
-
     const client = await pool.connect();
-
 
     try {
 
@@ -537,31 +517,40 @@ if (!departmentName) {
         await client.query("BEGIN");
 
         // ------------------------------------------
-// Find department dynamically
-// ------------------------------------------
+        // Decide department and validate category dynamically
+        // ------------------------------------------
 
-const departmentQuery = `
-    SELECT id
-    FROM departments
-    WHERE name = $1;
-`;
+        const catQuery = `
+            SELECT c.code, c.department_id, c.sla_hours, d.id AS dept_id, d.name AS department_name
+            FROM categories c
+            JOIN departments d ON c.department_id = d.id
+            WHERE c.code = $1 AND c.is_active = TRUE;
+        `;
+        const catRes = await client.query(catQuery, [category.toUpperCase()]);
 
-const departmentResult = await client.query(
-    departmentQuery,
-    [departmentName]
-);
-
-if (departmentResult.rows.length === 0) {
-
-    throw new AppError(
-        "Department not found",
-        500
-    );
-
-}
-
-const departmentId =
-    departmentResult.rows[0].id;
+        let departmentId;
+        if (catRes.rows.length > 0) {
+            departmentId = catRes.rows[0].department_id;
+        } else {
+            const fallbackNames = {
+                ROAD: "Road Department",
+                SANITATION: "Sanitation Department",
+                WATER: "Water Department",
+                LIGHTING: "Street Lighting Department"
+            };
+            const fallbackName = fallbackNames[category.toUpperCase()];
+            if (!fallbackName) {
+                throw new AppError("Invalid category", 400);
+            }
+            const departmentResult = await client.query(
+                "SELECT id FROM departments WHERE name = $1;",
+                [fallbackName]
+            );
+            if (departmentResult.rows.length === 0) {
+                throw new AppError("Department not found", 500);
+            }
+            departmentId = departmentResult.rows[0].id;
+        }
 
 
         // ------------------------------------------
@@ -1123,6 +1112,22 @@ async function getAllIssues(
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
+            civic_issues.created_at,
+            civic_issues.resolved_at,
+            COALESCE(c.sla_hours, 72) AS sla_hours,
+            c.icon AS category_icon,
+            CASE
+                WHEN civic_issues.status = 'RESOLVED' THEN
+                    CASE
+                        WHEN (civic_issues.resolved_at - civic_issues.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval
+                        THEN 'SLA_MET'
+                        ELSE 'SLA_BREACHED'
+                    END
+                WHEN (NOW() - civic_issues.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval
+                THEN 'OVERDUE'
+                ELSE 'WITHIN_SLA'
+            END AS sla_status,
+            ROUND(EXTRACT(EPOCH FROM (civic_issues.created_at + (COALESCE(c.sla_hours, 72) || ' hours')::interval - NOW())) / 3600) AS sla_hours_remaining,
             departments.name AS department_name,
             COUNT(reports.id) AS report_count,
             (
@@ -1134,6 +1139,8 @@ async function getAllIssues(
         FROM civic_issues
         JOIN departments
             ON civic_issues.department_id = departments.id
+        LEFT JOIN categories c
+            ON civic_issues.category = c.code
         LEFT JOIN reports
             ON civic_issues.id = reports.civic_issue_id
         ${whereClause}
@@ -1146,6 +1153,10 @@ async function getAllIssues(
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
+            civic_issues.created_at,
+            civic_issues.resolved_at,
+            c.sla_hours,
+            c.icon,
             departments.name
         ORDER BY ${sortColumn} ${sortOrder}, civic_issues.id ASC
         LIMIT $${limitParameter}
@@ -1321,11 +1332,32 @@ async function getAdminStats() {
             (SELECT COUNT(*)::int FROM civic_issues WHERE status IN ('OPEN', 'IN_PROGRESS', 'REOPENED')) AS active_issues;
     `);
 
+    const slaResult = await pool.query(`
+        SELECT
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS sla_met,
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS sla_breached,
+            COUNT(CASE WHEN ci.status NOT IN ('RESOLVED', 'REJECTED') AND (NOW() - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS currently_overdue,
+            COUNT(CASE WHEN ci.status NOT IN ('RESOLVED', 'REJECTED') AND (NOW() - ci.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS on_schedule,
+            ROUND(AVG(CASE WHEN ci.status = 'RESOLVED' THEN EXTRACT(EPOCH FROM (ci.resolved_at - ci.created_at)) / 3600 END)::numeric, 1) AS avg_resolution_hours
+        FROM civic_issues ci
+        LEFT JOIN categories c ON ci.category = c.code;
+    `);
+
+    const satisfactionResult = await pool.query(`
+        SELECT
+            ROUND(AVG(rating), 2) AS average_rating,
+            COUNT(*)::int AS total_reviews,
+            ROUND((COUNT(CASE WHEN is_satisfied = TRUE THEN 1 END)::numeric / NULLIF(COUNT(*), 0)) * 100, 1) AS satisfaction_rate_percent
+        FROM resolution_feedback;
+    `);
+
     return {
         totals: totalsResult.rows[0],
         byStatus: statusResult.rows,
         byCategory: categoryResult.rows,
-        byDepartment: deptResult.rows
+        byDepartment: deptResult.rows,
+        slaMetrics: slaResult.rows[0],
+        citizenSatisfaction: satisfactionResult.rows[0]
     };
 }
 
@@ -1531,6 +1563,183 @@ async function reopenIssueByCitizen({ civicIssueId, userId, reason }) {
     );
 }
 
+// ======================================================
+// CONFIGURABLE CATEGORIES & SLA MANAGEMENT
+// ======================================================
+
+async function getCategories(includeInactive = false) {
+    const query = `
+        SELECT
+            c.code,
+            c.name,
+            c.description,
+            c.icon,
+            c.department_id,
+            d.name AS department_name,
+            c.sla_hours,
+            c.is_active,
+            c.created_at,
+            COUNT(ci.id)::int AS issue_count
+        FROM categories c
+        JOIN departments d ON c.department_id = d.id
+        LEFT JOIN civic_issues ci ON c.code = ci.category
+        ${includeInactive ? "" : "WHERE c.is_active = TRUE"}
+        GROUP BY c.code, c.name, c.description, c.icon, c.department_id, d.name, c.sla_hours, c.is_active, c.created_at
+        ORDER BY c.name ASC;
+    `;
+    const res = await pool.query(query);
+    return res.rows;
+}
+
+async function createCategory({ code, name, description, icon = '📌', departmentId, slaHours = 72 }) {
+    const formattedCode = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+
+    const deptCheck = await pool.query("SELECT id FROM departments WHERE id = $1", [departmentId]);
+    if (deptCheck.rows.length === 0) {
+        throw new AppError("Department not found", 404);
+    }
+
+    const query = `
+        INSERT INTO categories (code, name, description, icon, department_id, sla_hours)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *;
+    `;
+    try {
+        const res = await pool.query(query, [
+            formattedCode,
+            name.trim(),
+            description?.trim() || null,
+            icon?.trim() || '📌',
+            departmentId,
+            Number(slaHours) || 72
+        ]);
+        return res.rows[0];
+    } catch (err) {
+        if (err.code === '23505') {
+            throw new AppError("A category with this code already exists", 400);
+        }
+        throw err;
+    }
+}
+
+async function updateCategory(code, fields = {}) {
+    const { name, description, icon, departmentId, slaHours, isActive } = fields;
+
+    const setClauses = [];
+    const values = [];
+
+    if (name !== undefined) {
+        values.push(name.trim());
+        setClauses.push(`name = $${values.length}`);
+    }
+    if (description !== undefined) {
+        values.push(description?.trim() || null);
+        setClauses.push(`description = $${values.length}`);
+    }
+    if (icon !== undefined) {
+        values.push(icon?.trim() || '📌');
+        setClauses.push(`icon = $${values.length}`);
+    }
+    if (departmentId !== undefined) {
+        values.push(departmentId);
+        setClauses.push(`department_id = $${values.length}`);
+    }
+    if (slaHours !== undefined) {
+        values.push(Number(slaHours));
+        setClauses.push(`sla_hours = $${values.length}`);
+    }
+    if (isActive !== undefined) {
+        values.push(Boolean(isActive));
+        setClauses.push(`is_active = $${values.length}`);
+    }
+
+    if (setClauses.length === 0) {
+        throw new AppError("No fields provided for update", 400);
+    }
+
+    values.push(code.toUpperCase());
+    const query = `
+        UPDATE categories
+        SET ${setClauses.join(", ")}
+        WHERE code = $${values.length}
+        RETURNING *;
+    `;
+    const res = await pool.query(query, values);
+    if (res.rows.length === 0) {
+        throw new AppError("Category not found", 404);
+    }
+    return res.rows[0];
+}
+
+// ======================================================
+// MUNICIPAL ANALYTICS & SLA PERFORMANCE
+// ======================================================
+
+async function getMunicipalAnalytics() {
+    const deptSlaQuery = `
+        SELECT
+            d.id AS department_id,
+            d.name AS department_name,
+            COUNT(ci.id)::int AS total_issues,
+            COUNT(CASE WHEN ci.status = 'RESOLVED' THEN 1 END)::int AS resolved_count,
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS resolved_within_sla,
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS resolved_breached_sla,
+            COUNT(CASE WHEN ci.status NOT IN ('RESOLVED', 'REJECTED') AND (NOW() - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS overdue_active,
+            ROUND(AVG(CASE WHEN ci.status = 'RESOLVED' THEN EXTRACT(EPOCH FROM (ci.resolved_at - ci.created_at)) / 3600 END)::numeric, 1) AS avg_resolution_hours
+        FROM departments d
+        LEFT JOIN civic_issues ci ON ci.department_id = d.id
+        LEFT JOIN categories c ON ci.category = c.code
+        GROUP BY d.id, d.name
+        ORDER BY d.id ASC;
+    `;
+    const deptSlaRes = await pool.query(deptSlaQuery);
+
+    const satisfactionQuery = `
+        SELECT
+            ROUND(AVG(rating), 2) AS average_rating,
+            COUNT(*)::int AS total_reviews,
+            COUNT(CASE WHEN rating = 5 THEN 1 END)::int AS five_star,
+            COUNT(CASE WHEN rating = 4 THEN 1 END)::int AS four_star,
+            COUNT(CASE WHEN rating = 3 THEN 1 END)::int AS three_star,
+            COUNT(CASE WHEN rating <= 2 THEN 1 END)::int AS low_star,
+            ROUND((COUNT(CASE WHEN is_satisfied = TRUE THEN 1 END)::numeric / NULLIF(COUNT(*), 0)) * 100, 1) AS satisfaction_rate_percent
+        FROM resolution_feedback;
+    `;
+    const satRes = await pool.query(satisfactionQuery);
+
+    const hazardsQuery = `
+        SELECT
+            COUNT(*)::int AS total_hazards,
+            COUNT(CASE WHEN ci.status != 'RESOLVED' THEN 1 END)::int AS active_hazards,
+            COUNT(CASE WHEN aa.hazard_type = 'ELECTRICAL' AND ci.status != 'RESOLVED' THEN 1 END)::int AS electrical_hazards,
+            COUNT(CASE WHEN aa.hazard_type = 'STRUCTURAL' AND ci.status != 'RESOLVED' THEN 1 END)::int AS structural_hazards,
+            COUNT(CASE WHEN aa.hazard_type = 'HEALTH' AND ci.status != 'RESOLVED' THEN 1 END)::int AS health_hazards
+        FROM ai_assessments aa
+        JOIN civic_issues ci ON aa.civic_issue_id = ci.id
+        WHERE aa.safety_hazard_detected = TRUE;
+    `;
+    const hazardsRes = await pool.query(hazardsQuery);
+
+    const overallSlaQuery = `
+        SELECT
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS sla_met,
+            COUNT(CASE WHEN ci.status = 'RESOLVED' AND (ci.resolved_at - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS sla_breached,
+            COUNT(CASE WHEN ci.status NOT IN ('RESOLVED', 'REJECTED') AND (NOW() - ci.created_at) > (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS currently_overdue,
+            COUNT(CASE WHEN ci.status NOT IN ('RESOLVED', 'REJECTED') AND (NOW() - ci.created_at) <= (COALESCE(c.sla_hours, 72) || ' hours')::interval THEN 1 END)::int AS on_schedule,
+            ROUND(AVG(CASE WHEN ci.status = 'RESOLVED' THEN EXTRACT(EPOCH FROM (ci.resolved_at - ci.created_at)) / 3600 END)::numeric, 1) AS avg_resolution_hours
+        FROM civic_issues ci
+        LEFT JOIN categories c ON ci.category = c.code;
+    `;
+    const overallSlaRes = await pool.query(overallSlaQuery);
+
+    return {
+        departments: deptSlaRes.rows,
+        satisfaction: satRes.rows[0],
+        hazards: hazardsRes.rows[0],
+        overallSla: overallSlaRes.rows[0]
+    };
+}
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
@@ -1548,5 +1757,9 @@ module.exports = {
     getMapIssues,
     submitResolutionFeedback,
     getResolutionFeedback,
-    reopenIssueByCitizen
+    reopenIssueByCitizen,
+    getCategories,
+    createCategory,
+    updateCategory,
+    getMunicipalAnalytics
 };
