@@ -1,5 +1,6 @@
 const pool = require("../db/database");
 const AppError = require("../utils/AppError");
+const { isPostgisAvailable, haversineDistance } = require("../utils/gis");
 
 async function updateIssueStatus(issueId, status, userId, note = null) {
 
@@ -551,30 +552,42 @@ const departmentId =
         // Find nearby CivicIssue
         // ------------------------------------------
 
-        const findIssueQuery = `
-            SELECT id
-            FROM civic_issues
-            WHERE category = $1
-            AND latitude BETWEEN $2 AND $3
-            AND longitude BETWEEN $4 AND $5
-            LIMIT 1;
-        `;
+        const hasPostgis = await isPostgisAvailable();
 
+        let issueResult;
 
-        const findIssueValues = [
-            category,
-            latitude - 0.001,
-            latitude + 0.001,
-            longitude - 0.001,
-            longitude + 0.001
-        ];
-
-
-        const issueResult = await client.query(
-            findIssueQuery,
-            findIssueValues
-        );
-
+        if (hasPostgis) {
+            // High-precision PostGIS ST_DWithin search (100 meters) using spatial GIST index
+            const findIssueQuery = `
+                SELECT id
+                FROM civic_issues
+                WHERE category = $1
+                  AND status != 'RESOLVED'
+                  AND location IS NOT NULL
+                  AND ST_DWithin(location, ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography, 100)
+                ORDER BY ST_Distance(location, ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography) ASC
+                LIMIT 1;
+            `;
+            issueResult = await client.query(findIssueQuery, [category, latitude, longitude]);
+        } else {
+            // Degree-based bounding box fallback
+            const findIssueQuery = `
+                SELECT id
+                FROM civic_issues
+                WHERE category = $1
+                  AND status != 'RESOLVED'
+                  AND latitude BETWEEN $2 AND $3
+                  AND longitude BETWEEN $4 AND $5
+                LIMIT 1;
+            `;
+            issueResult = await client.query(findIssueQuery, [
+                category,
+                latitude - 0.001,
+                latitude + 0.001,
+                longitude - 0.001,
+                longitude + 0.001
+            ]);
+        }
 
         let civicIssueId;
 
@@ -597,46 +610,69 @@ const departmentId =
 
         else {
 
-            const createIssueQuery = `
-                INSERT INTO civic_issues (
+            if (hasPostgis) {
+                const createIssueQuery = `
+                    INSERT INTO civic_issues (
+                        title,
+                        category,
+                        status,
+                        priority_score,
+                        latitude,
+                        longitude,
+                        location,
+                        department_id
+                    )
+                    VALUES (
+                        $1,
+                        $2,
+                        'OPEN',
+                        50,
+                        $3,
+                        $4,
+                        ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
+                        $5
+                    )
+                    RETURNING id;
+                `;
+                const newIssueResult = await client.query(createIssueQuery, [
                     title,
                     category,
-                    status,
-                    priority_score,
                     latitude,
                     longitude,
-                    department_id
-                )
-                VALUES (
-                    $1,
-                    $2,
-                    'OPEN',
-                    50,
-                    $3,
-                    $4,
-                    $5
-                )
-                RETURNING id;
-            `;
-
-
-            const createIssueValues = [
-                title,
-                category,
-                latitude,
-                longitude,
-                departmentId
-            ];
-
-
-            const newIssueResult = await client.query(
-                createIssueQuery,
-                createIssueValues
-            );
-
-
-            civicIssueId =
-                newIssueResult.rows[0].id;
+                    departmentId
+                ]);
+                civicIssueId = newIssueResult.rows[0].id;
+            } else {
+                const createIssueQuery = `
+                    INSERT INTO civic_issues (
+                        title,
+                        category,
+                        status,
+                        priority_score,
+                        latitude,
+                        longitude,
+                        department_id
+                    )
+                    VALUES (
+                        $1,
+                        $2,
+                        'OPEN',
+                        50,
+                        $3,
+                        $4,
+                        $5
+                    )
+                    RETURNING id;
+                `;
+                const newIssueResult = await client.query(createIssueQuery, [
+                    title,
+                    category,
+                    latitude,
+                    longitude,
+                    departmentId
+                ]);
+                civicIssueId = newIssueResult.rows[0].id;
+            }
 
         }
 
@@ -645,29 +681,65 @@ const departmentId =
         // Create report
         // ------------------------------------------
 
-        const insertReportQuery = `
-            INSERT INTO reports (
-                user_id,
-                civic_issue_id,
+        let insertReportQuery;
+        let insertReportValues;
+
+        if (hasPostgis) {
+            insertReportQuery = `
+                INSERT INTO reports (
+                    user_id,
+                    civic_issue_id,
+                    title,
+                    description,
+                    category,
+                    image,
+                    latitude,
+                    longitude,
+                    location
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6,
+                    $7, $8,
+                    ST_SetSRID(ST_MakePoint($8, $7), 4326)::geography
+                )
+                RETURNING *;
+            `;
+            insertReportValues = [
+                userId,
+                civicIssueId,
                 title,
                 description,
                 category,
-                image
-            )
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *;
-        `;
-
-
-        const insertReportValues = [
-            userId,
-            civicIssueId,
-            title,
-            description,
-            category,
-            image
-        ];
-
+                image,
+                latitude,
+                longitude
+            ];
+        } else {
+            insertReportQuery = `
+                INSERT INTO reports (
+                    user_id,
+                    civic_issue_id,
+                    title,
+                    description,
+                    category,
+                    image,
+                    latitude,
+                    longitude
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING *;
+            `;
+            insertReportValues = [
+                userId,
+                civicIssueId,
+                title,
+                description,
+                category,
+                image,
+                latitude,
+                longitude
+            ];
+        }
 
         const reportResult = await client.query(
             insertReportQuery,
@@ -1243,6 +1315,58 @@ async function getDepartments() {
     return result.rows;
 }
 
+async function getMapIssues({ category, status, min_lat, max_lat, min_lng, max_lng } = {}) {
+
+    const conditions = [];
+    const values = [];
+
+    if (category) {
+        values.push(category);
+        conditions.push(`ci.category = $${values.length}`);
+    }
+
+    if (status) {
+        values.push(status);
+        conditions.push(`ci.status = $${values.length}`);
+    }
+
+    if (min_lat && max_lat && min_lng && max_lng) {
+        values.push(Number(min_lat), Number(max_lat), Number(min_lng), Number(max_lng));
+        conditions.push(`ci.latitude BETWEEN $${values.length - 3} AND $${values.length - 2}`);
+        conditions.push(`ci.longitude BETWEEN $${values.length - 1} AND $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const query = `
+        SELECT
+            ci.id,
+            ci.title,
+            ci.category,
+            ci.status,
+            ci.priority_score,
+            ci.latitude,
+            ci.longitude,
+            d.name AS department_name,
+            COUNT(r.id) AS report_count
+        FROM civic_issues ci
+        JOIN departments d ON ci.department_id = d.id
+        LEFT JOIN reports r ON ci.id = r.civic_issue_id
+        ${whereClause}
+        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, d.name
+        ORDER BY ci.priority_score DESC, ci.id DESC
+        LIMIT 300;
+    `;
+
+    const result = await pool.query(query, values);
+    return result.rows.map(row => ({
+        ...row,
+        report_count: Number(row.report_count),
+        latitude: Number(row.latitude),
+        longitude: Number(row.longitude)
+    }));
+}
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
@@ -1256,5 +1380,6 @@ module.exports = {
     assignIssue,
     getAdminStats,
     getAllOfficers,
-    getDepartments
+    getDepartments,
+    getMapIssues
 };

@@ -31,8 +31,11 @@ const {
     assignIssue,
     getAdminStats,
     getAllOfficers,
-    getDepartments
+    getDepartments,
+    getMapIssues
 } = require("../services/issueService");
+
+const { haversineDistance } = require("../utils/gis");
 
 const {
     sendSuccess,
@@ -276,11 +279,65 @@ router.get(
 
             const result = await pool.query(query, values);
 
+            const issuesWithDistance = result.rows.map((row) => ({
+                ...row,
+                distance_meters: haversineDistance(lat, lng, Number(row.latitude), Number(row.longitude))
+            })).sort((a, b) => a.distance_meters - b.distance_meters);
+
             return sendSuccess(
                 res,
                 200,
                 "Nearby issues fetched successfully",
-                result.rows
+                issuesWithDistance
+            );
+
+        }
+
+        catch (error) {
+
+            next(error);
+
+        }
+
+    }
+);
+
+
+// ======================================================
+// GET /api/issues/map
+// Geographic endpoint for interactive map & cluster view
+// PUBLIC
+// ======================================================
+
+router.get(
+    "/issues/map",
+    async (req, res, next) => {
+
+        try {
+
+            const {
+                category,
+                status,
+                min_lat,
+                max_lat,
+                min_lng,
+                max_lng
+            } = req.query;
+
+            const issues = await getMapIssues({
+                category,
+                status,
+                min_lat,
+                max_lat,
+                min_lng,
+                max_lng
+            });
+
+            return sendSuccess(
+                res,
+                200,
+                "Map issues fetched successfully",
+                issues
             );
 
         }

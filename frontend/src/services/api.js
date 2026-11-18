@@ -178,6 +178,15 @@ export const issueApi = {
 
   getEvidence: (id, token) =>
     apiRequest(`/issues/${id}/evidence`, { token }),
+
+  getMapIssues: (params = {}) => {
+    const query = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+      )
+    ).toString();
+    return apiRequest(`/issues/map${query ? `?${query}` : ''}`);
+  },
 };
 
 /**

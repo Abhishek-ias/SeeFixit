@@ -1,7 +1,7 @@
 # SeeFixit — Master Project Status
 > Last updated: 2026-11-19 | Based on verified codebase audit
 
-## Current Phase: P1 Completed → Transitioning to P2 (GIS & AI Intelligence)
+## Current Phase: P2.1 (GIS & PostGIS) Completed → Moving to P2.2 (Core AI Intelligence)
 
 ---
 
@@ -10,11 +10,11 @@
 | Property | Value |
 |----------|-------|
 | Repository | https://github.com/Abhishek-ias/SeeFixit |
-| Latest commit | `abde1cf` (Citizen Flow & Router) |
-| Latest migration (local & Neon) | `010_create_authority_and_extended_status.sql` |
-| Neon Migration Status | ✅ Migrations 000–010 fully applied |
-| Cloudinary Integration | ✅ Configured (.env keys & upload utility) |
-| Frontend build | ✅ PASSES (0 errors, 188ms) |
+| Latest commit | `bb3e341` (P1.5 Authority Workflow) |
+| Latest migration (local & Neon) | `011_enable_postgis_and_spatial_indexes.sql` |
+| PostGIS Status | ✅ PostGIS enabled on Neon; `location GEOGRAPHY(Point, 4326)` & GIST indexes active |
+| Interactive Map | ✅ Leaflet & OpenStreetMap tiles integrated (`/map`) with custom pins & popups |
+| Frontend build | ✅ PASSES (0 errors, 261ms) |
 | Frontend lint | ✅ PASSES (0 warnings, 0 errors) |
 
 ---
@@ -62,24 +62,24 @@
 
 ---
 
-## P2 Checklist (GIS + AI Intelligence) — NEXT UP
+## P2 Checklist (GIS + AI Intelligence)
 
-- [ ] Enable PostGIS on Neon (`CREATE EXTENSION postgis`)
-- [ ] Migration: migrate lat/lon to GEOGRAPHY(Point) and add spatial indexes
-- [ ] Build interactive Map Component (`MapView.jsx`) with Leaflet & OpenStreetMap
-- [ ] Marker clustering & category heatmap visualization
-- [ ] AI service integration (FastAPI / lightweight classifier for civic issue detection)
-- [ ] Automated duplicate detection with spatial + semantic matching
-- [ ] In-app and email notifications on issue status updates
-- [ ] Citizen feedback & resolution rating
+### P2.1 — GIS & PostGIS — 100% COMPLETE
+- [x] Enable PostGIS on Neon (`CREATE EXTENSION postgis`) via migration 011
+- [x] Migration 011: Add `location GEOGRAPHY(Point, 4326)` to `civic_issues` and `reports`
+- [x] Migration 011: Add spatial GIST indexes (`idx_civic_issues_location_gist`, `idx_reports_location_gist`)
+- [x] Spatial radius proximity matching with PostGIS `ST_DWithin` & `ST_Distance`
+- [x] Haversine distance utility & unit tests in `backend/utils/gis.js`
+- [x] Endpoint `GET /api/issues/map` for viewport and category spatial querying
+- [x] Interactive Leaflet Map page (`/map`) with OpenStreetMap tiles
+- [x] Custom dynamic map pins with category icons and status color rings
+- [x] Interactive pin popups & synchronized sidebar drawer
+- [x] Browser GPS "Locate Me" position centering
 
----
-
-## P3 Checklist (Production + Pilot)
-
-- [ ] GitHub Actions CI (lint + test + build)
-- [ ] Dockerfile (backend + frontend)
-- [ ] Prometheus metrics endpoint & Grafana dashboard
-- [ ] Automated DB backup drill
-- [ ] OWASP ZAP security scan
-- [ ] Pilot jurisdiction onboarding & training
+### P2.2 — Core AI Intelligence — NEXT UP
+- [ ] AI image classification service (potholes, garbage, water leak, streetlights)
+- [ ] AI category & department recommendation
+- [ ] AI duplicate similarity matching
+- [ ] AI severity & priority score recommendation
+- [ ] In-app and email notifications
+- [ ] Citizen feedback & resolution verification

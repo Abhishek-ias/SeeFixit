@@ -13,6 +13,7 @@ import ReportForm from './components/ReportForm'
 import MyReports  from './pages/MyReports'
 import IssueDetail from './pages/IssueDetail'
 import AdminDashboard from './pages/AdminDashboard'
+import MapView from './pages/MapView'
 
 import { authApi } from './services/api'
 import './App.css'
@@ -120,6 +121,9 @@ function AppInner() {
         </Link>
 
         <nav className="nav-links">
+          <Link to="/map" className="nav-dashboard-link">
+            Civic Map 🗺️
+          </Link>
           <a href="/#categories">Categories</a>
           <a href="/#how-it-works">How it works</a>
           <a href="/#about">About</a>
@@ -180,9 +184,9 @@ function AppInner() {
                         Report a civic issue <span>{'→'}</span>
                       </button>
 
-                      <a className="button-secondary" href="#categories">
-                        Explore issues
-                      </a>
+                      <Link to="/map" className="button-secondary">
+                        Explore live map 🗺️
+                      </Link>
                     </div>
 
                     {session && (
@@ -280,6 +284,12 @@ function AppInner() {
                 </section>
               </>
             }
+          />
+
+          {/* Interactive GIS Civic Map */}
+          <Route
+            path="/map"
+            element={<MapView />}
           />
 
           {/* Citizen dashboard */}
