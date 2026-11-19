@@ -3,6 +3,7 @@ const AppError = require("../utils/AppError");
 const { isPostgisAvailable, haversineDistance } = require("../utils/gis");
 const { assessReport, getIssueAiAssessment, verifyResolutionEvidence } = require("./aiService");
 const { notifyIssueCitizens, notifyAssignedOfficer } = require("./notificationService");
+const { sendReportConfirmationEmail } = require("./mailService");
 
 async function updateIssueStatus(issueId, status, userId, note = null) {
 
@@ -262,12 +263,14 @@ async function updateIssueStatus(issueId, status, userId, note = null) {
 
         await client.query("COMMIT");
 
-        // Notify citizens asynchronously
+        // Notify citizens asynchronously (in-app & email)
         notifyIssueCitizens({
             civicIssueId: issueId,
             title: `Issue #${issueId} Status: ${status}`,
             message: `Civic issue status updated to ${status}.${note ? " Officer note: " + note : ""}`,
-            type: "STATUS_CHANGE"
+            type: "STATUS_CHANGE",
+            status,
+            note
         }).catch(() => {});
 
         // ------------------------------------------
@@ -814,10 +817,26 @@ async function createReport(
 
         await client.query("COMMIT");
 
-        // Trigger AI Assessment in background
-        assessReport(reportResult.rows[0].id, civicIssueId, title, description).catch((err) => {
+        // Trigger Context-Aware AI Assessment in background
+        assessReport(reportResult.rows[0].id, civicIssueId, title, description, latitude, longitude).catch((err) => {
             console.error("AI assessment background job error:", err.message);
         });
+
+        // Dispatch Citizen Grievance Confirmation Email asynchronously
+        pool.query("SELECT email, name FROM users WHERE id = $1", [userId])
+            .then((uRes) => {
+                if (uRes.rows.length > 0 && uRes.rows[0].email) {
+                    sendReportConfirmationEmail({
+                        email: uRes.rows[0].email,
+                        name: uRes.rows[0].name,
+                        reportId: reportResult.rows[0].id,
+                        issueId: civicIssueId,
+                        title,
+                        category
+                    }).catch(() => {});
+                }
+            })
+            .catch(() => {});
 
 
         return {
@@ -1208,7 +1227,10 @@ async function getAllIssues(
 async function assignIssue(issueId, assignedToUserId, assignedByUserId, notes = null) {
 
     const issueCheck = await pool.query(
-        "SELECT id, title FROM civic_issues WHERE id = $1",
+        `SELECT ci.id, ci.title, ci.priority_score, d.name AS department_name
+         FROM civic_issues ci
+         LEFT JOIN departments d ON ci.department_id = d.id
+         WHERE ci.id = $1`,
         [issueId]
     );
 
@@ -1274,7 +1296,9 @@ async function assignIssue(issueId, assignedToUserId, assignedByUserId, notes = 
         notifyAssignedOfficer({
             officerId: assignedToUserId,
             civicIssueId: issueId,
-            issueTitle: issueCheck.rows[0].title
+            issueTitle: issueCheck.rows[0].title,
+            priorityScore: issueCheck.rows[0].priority_score,
+            department: issueCheck.rows[0].department_name
         }).catch(() => {});
 
         notifyIssueCitizens({

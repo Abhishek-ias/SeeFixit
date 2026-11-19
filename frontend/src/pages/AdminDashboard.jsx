@@ -57,6 +57,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
   const [stats, setStats] = useState(null)
   const [officers, setOfficers] = useState([])
   const [departments, setDepartments] = useState([])
+  const [hotspots, setHotspots] = useState([])
 
   const [issues, setIssues] = useState([])
   const [pagination, setPagination] = useState({ page: 1, limit: 15, total: 0, totalPages: 1 })
@@ -112,6 +113,10 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     adminApi.getDepartments()
       .then((res) => setDepartments(res?.data ?? []))
       .catch((err) => console.error('Failed to load departments:', err))
+
+    issueApi.getHotspots({ days: 60, minIssues: 2 })
+      .then((res) => setHotspots(res?.data?.hotspots ?? []))
+      .catch((err) => console.error('Failed to load hotspots:', err))
   }, [token, user])
 
   // Helper to re-fetch issues (e.g. for pagination or after status change)
@@ -442,6 +447,30 @@ function AdminDashboard({ token, user, onAuthRequired }) {
               {stats.citizenSatisfaction?.average_rating ? `${stats.citizenSatisfaction.average_rating} / 5` : 'No reviews yet'}
             </strong>
           </div>
+        </div>
+      )}
+
+      {/* ── Chronic Hotspots Alert Bar ── */}
+      {hotspots.length > 0 && (
+        <div className="chronic-hotspots-alert-bar">
+          <div className="hotspots-alert-content">
+            <div className="hotspots-alert-title">
+              <span className="hotspot-badge-pulse">🔥</span>
+              <strong>Systemic Failure Alerts: {hotspots.length} chronic hotspot{hotspots.length !== 1 ? 's' : ''} detected</strong>
+            </div>
+            <div className="hotspots-summary-chips">
+              {hotspots.slice(0, 4).map((h) => (
+                <div key={h.id} className={`hotspot-chip hotspot-chip-${h.chronicRisk.toLowerCase()}`}>
+                  <span className="chip-cat">{h.primaryCategory}</span>
+                  <span className="chip-count">{h.totalIssues} issues ({h.openIssues} open)</span>
+                  <span className="chip-risk">{h.chronicRisk}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <Link to="/map" className="hotspots-map-link">
+            Explore On Map 🗺️
+          </Link>
         </div>
       )}
 

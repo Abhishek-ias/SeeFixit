@@ -187,6 +187,15 @@ export const issueApi = {
     ).toString();
     return apiRequest(`/issues/map${query ? `?${query}` : ''}`);
   },
+
+  getHotspots: (params = {}) => {
+    const query = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+      )
+    ).toString();
+    return apiRequest(`/issues/hotspots${query ? `?${query}` : ''}`);
+  },
 };
 
 /**

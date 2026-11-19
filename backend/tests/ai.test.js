@@ -62,3 +62,44 @@ test("AI produces explainable structured summary and action recommendation", () 
     assert.ok(analysis.suggestedAction.length > 10);
     assert.equal(analysis.modelProvider, "heuristic-civic-ontology");
 });
+
+test("AI detects sensitive healthcare zone and boosts priority score", () => {
+    const analysis = analyzeText(
+        "Road cave-in outside Apollo Hospital",
+        "Ambulance entry blocked due to crater right in front of emergency clinic."
+    );
+
+    assert.equal(analysis.predictedCategory, "ROAD");
+    assert.equal(analysis.sensitiveZoneDetected, true);
+    assert.equal(analysis.sensitiveZoneType, "HEALTHCARE");
+    assert.ok(analysis.severityScore >= 80);
+    assert.match(analysis.suggestedAction, /CRITICAL HEALTHCARE ZONE/i);
+    assert.match(analysis.summary, /Critical Healthcare Zone/i);
+});
+
+test("AI detects school safety zone and flags student risk", () => {
+    const analysis = analyzeText(
+        "Pothole near primary school",
+        "Students walking to school campus are in danger of tripping."
+    );
+
+    assert.equal(analysis.sensitiveZoneDetected, true);
+    assert.equal(analysis.sensitiveZoneType, "EDUCATION");
+    assert.ok(analysis.severityScore >= 70);
+    assert.match(analysis.suggestedAction, /SCHOOL \/ CHILD SAFETY ZONE/i);
+});
+
+test("AI incorporates location recurrence count and flags chronic hotspot", () => {
+    const analysis = analyzeText(
+        "Recurring water pipe leak at 4th block",
+        "Pipeline leaking fresh water again after repair.",
+        { recurrenceCount: 3 }
+    );
+
+    assert.equal(analysis.predictedCategory, "WATER");
+    assert.equal(analysis.isChronicHotspot, true);
+    assert.equal(analysis.recurrenceCount, 3);
+    assert.ok(analysis.severityScore >= 65);
+    assert.match(analysis.suggestedAction, /CHRONIC HOTSPOT: 3 recent nearby incidents/i);
+    assert.match(analysis.summary, /Active chronic recurrence zone/i);
+});

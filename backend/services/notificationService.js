@@ -1,5 +1,10 @@
 const pool = require("../db/database");
 const logger = require("../utils/logger");
+const {
+    sendStatusUpdateEmail,
+    sendResolutionEmail,
+    sendOfficerAssignmentEmail
+} = require("./mailService");
 
 /**
  * Creates an in-app notification for a user.
@@ -21,30 +26,55 @@ async function createNotification({ userId, civicIssueId = null, title, message,
 
 /**
  * Notifies all citizens who reported a given civic issue when its status changes.
+ * Dispatches both in-app notification and transactional outbound email.
  */
-async function notifyIssueCitizens({ civicIssueId, title, message, type = "STATUS_CHANGE", excludeUserId = null }) {
+async function notifyIssueCitizens({ civicIssueId, title, message, type = "STATUS_CHANGE", excludeUserId = null, status = null, note = null }) {
     try {
         const query = `
-            SELECT DISTINCT user_id
-            FROM reports
-            WHERE civic_issue_id = $1
+            SELECT DISTINCT u.id, u.email, u.name
+            FROM reports r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.civic_issue_id = $1
         `;
         const res = await pool.query(query, [civicIssueId]);
         const promises = [];
 
-        for (const row of res.rows) {
-            if (excludeUserId && row.user_id === excludeUserId) {
+        for (const user of res.rows) {
+            if (excludeUserId && user.id === excludeUserId) {
                 continue;
             }
+            // In-app notification
             promises.push(
                 createNotification({
-                    userId: row.user_id,
+                    userId: user.id,
                     civicIssueId,
                     title,
                     message,
                     type
                 })
             );
+
+            // Outbound Email dispatch (non-blocking)
+            if (user.email && user.email.includes("@")) {
+                if (status === "RESOLVED") {
+                    sendResolutionEmail({
+                        email: user.email,
+                        name: user.name,
+                        issueId: civicIssueId,
+                        title,
+                        note
+                    }).catch(err => logger.error("Failed to send resolution email", { error: err.message }));
+                } else {
+                    sendStatusUpdateEmail({
+                        email: user.email,
+                        name: user.name,
+                        issueId: civicIssueId,
+                        title,
+                        status: status || message,
+                        note
+                    }).catch(err => logger.error("Failed to send status update email", { error: err.message }));
+                }
+            }
         }
 
         await Promise.all(promises);
@@ -55,8 +85,9 @@ async function notifyIssueCitizens({ civicIssueId, title, message, type = "STATU
 
 /**
  * Notifies an officer when assigned to an issue.
+ * Dispatches both in-app notification and email alert.
  */
-async function notifyAssignedOfficer({ officerId, civicIssueId, issueTitle }) {
+async function notifyAssignedOfficer({ officerId, civicIssueId, issueTitle, priorityScore = 50, department = null }) {
     try {
         await createNotification({
             userId: officerId,
@@ -65,6 +96,18 @@ async function notifyAssignedOfficer({ officerId, civicIssueId, issueTitle }) {
             message: `You have been assigned to Issue #${civicIssueId}: "${issueTitle || 'Civic Problem'}".`,
             type: "ASSIGNMENT"
         });
+
+        const officerRes = await pool.query("SELECT email, name FROM users WHERE id = $1", [officerId]);
+        if (officerRes.rows.length > 0 && officerRes.rows[0].email) {
+            sendOfficerAssignmentEmail({
+                email: officerRes.rows[0].email,
+                officerName: officerRes.rows[0].name,
+                issueId: civicIssueId,
+                title: issueTitle,
+                priorityScore,
+                department
+            }).catch(err => logger.error("Failed to send officer assignment email", { error: err.message }));
+        }
     } catch (err) {
         logger.error("Failed to notify assigned officer", { error: err.message, officerId, civicIssueId });
     }

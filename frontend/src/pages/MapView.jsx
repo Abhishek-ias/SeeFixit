@@ -46,10 +46,32 @@ function createMarkerIcon(category, status) {
   })
 }
 
+function createHotspotIcon(hotspot) {
+  const riskColor = hotspot.chronicRisk === 'CRITICAL'
+    ? '#dc2626'
+    : hotspot.chronicRisk === 'HIGH'
+      ? '#ea580c'
+      : '#d97706'
+
+  return L.divIcon({
+    className: 'hotspot-marker-container',
+    html: `
+      <div class="hotspot-pulse-badge" style="background-color: ${riskColor}; box-shadow: 0 0 0 6px ${riskColor}33;">
+        <span class="hotspot-badge-icon">🔥</span>
+        <span class="hotspot-badge-count">${hotspot.totalIssues}</span>
+      </div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20],
+  })
+}
+
 function MapView() {
   const mapContainerRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersLayerRef = useRef(null)
+  const hotspotsLayerRef = useRef(null)
   const markerMapRef = useRef(new Map())
 
   const [issues, setIssues] = useState([])
@@ -58,6 +80,9 @@ function MapView() {
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [selectedIssue, setSelectedIssue] = useState(null)
+  const [showHotspots, setShowHotspots] = useState(false)
+  const [hotspots, setHotspots] = useState([])
+  const [selectedHotspot, setSelectedHotspot] = useState(null)
   const [, setUserLocation] = useState(null)
   const [locating, setLocating] = useState(false)
 
@@ -80,6 +105,10 @@ function MapView() {
 
     const markersGroup = L.featureGroup().addTo(map)
     markersLayerRef.current = markersGroup
+
+    const hotspotsGroup = L.featureGroup().addTo(map)
+    hotspotsLayerRef.current = hotspotsGroup
+
     mapInstanceRef.current = map
 
     return () => {
@@ -111,6 +140,26 @@ function MapView() {
 
     return () => { active = false }
   }, [selectedCategory, selectedStatus])
+
+  // 2b. Fetch chronic hotspots
+  useEffect(() => {
+    let active = true
+
+    issueApi.getHotspots({
+      category: selectedCategory || undefined,
+      days: 60,
+    })
+      .then((res) => {
+        if (!active) return
+        setHotspots(res?.data?.hotspots ?? [])
+      })
+      .catch(() => {
+        if (!active) return
+        setHotspots([])
+      })
+
+    return () => { active = false }
+  }, [selectedCategory])
 
   // 3. Render and synchronize markers whenever issues change
   useEffect(() => {
@@ -168,6 +217,61 @@ function MapView() {
     }
   }, [issues])
 
+  // 3b. Render Chronic Hotspot Clusters Layer
+  useEffect(() => {
+    const layer = hotspotsLayerRef.current
+    if (!layer) return
+
+    layer.clearLayers()
+    if (!showHotspots || hotspots.length === 0) return
+
+    hotspots.forEach((h) => {
+      const riskColor = h.chronicRisk === 'CRITICAL'
+        ? '#dc2626'
+        : h.chronicRisk === 'HIGH'
+          ? '#ea580c'
+          : '#d97706'
+
+      const circle = L.circle([h.center.latitude, h.center.longitude], {
+        radius: h.radiusMeters,
+        color: riskColor,
+        fillColor: riskColor,
+        fillOpacity: 0.18,
+        weight: 2,
+        dashArray: '5, 5',
+      })
+
+      const marker = L.marker([h.center.latitude, h.center.longitude], {
+        icon: createHotspotIcon(h),
+      })
+
+      const popupContent = `
+        <div class="hotspot-popup-card">
+          <div class="hotspot-popup-tag" style="background: ${riskColor}; color: #ffffff;">
+            🔥 ${h.chronicRisk} CHRONIC ZONE
+          </div>
+          <h4 class="hotspot-popup-title">${h.primaryCategory} Problem Cluster</h4>
+          <p class="hotspot-popup-stats">
+            <strong>${h.totalIssues}</strong> complaints (${h.openIssues} active) in ~${h.radiusMeters}m radius
+          </p>
+          <div class="hotspot-rec-box">
+            <div class="hotspot-rec-heading">Municipal Recommendation:</div>
+            <p class="hotspot-rec-text">${h.recommendation}</p>
+          </div>
+        </div>
+      `
+
+      marker.bindPopup(popupContent, { maxWidth: 300, className: 'custom-leaflet-popup' })
+      circle.bindPopup(popupContent, { maxWidth: 300, className: 'custom-leaflet-popup' })
+
+      marker.on('click', () => setSelectedHotspot(h))
+      circle.on('click', () => setSelectedHotspot(h))
+
+      circle.addTo(layer)
+      marker.addTo(layer)
+    })
+  }, [showHotspots, hotspots])
+
   // Zoom into specific issue
   const handleSelectIssue = useCallback((issue) => {
     setSelectedIssue(issue)
@@ -216,6 +320,10 @@ function MapView() {
     )
   }
 
+  const displayedIssues = selectedHotspot
+    ? issues.filter((i) => selectedHotspot.issues.some((hi) => hi.id === i.id))
+    : issues
+
   return (
     <div className="map-view-page">
       {/* ── Top Floating Filter Bar ── */}
@@ -249,6 +357,14 @@ function MapView() {
           </select>
 
           <button
+            onClick={() => setShowHotspots((prev) => !prev)}
+            className={`map-hotspots-toggle ${showHotspots ? 'active' : ''}`}
+            title="Toggle chronic hotspot clusters"
+          >
+            🔥 Hotspots ({hotspots.length})
+          </button>
+
+          <button
             onClick={handleLocateMe}
             className="map-locate-btn"
             disabled={locating}
@@ -273,21 +389,37 @@ function MapView() {
         <aside className="map-side-drawer">
           <div className="drawer-header">
             <h3>Nearby Civic Issues</h3>
-            <span>{issues.length} pins</span>
+            <span>{displayedIssues.length} pins</span>
           </div>
+
+          {selectedHotspot && (
+            <div className="hotspot-filter-banner">
+              <div className="hotspot-filter-info">
+                <strong>🔥 Hotspot: {selectedHotspot.primaryCategory}</strong>
+                <span>({selectedHotspot.totalIssues} recurring issues)</span>
+              </div>
+              <button
+                onClick={() => setSelectedHotspot(null)}
+                className="clear-hotspot-filter-btn"
+                title="Reset cluster filter"
+              >
+                ✕ Clear
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <div className="drawer-loading">
               <div className="spinner" />
               <p>Loading spatial points…</p>
             </div>
-          ) : issues.length === 0 ? (
+          ) : displayedIssues.length === 0 ? (
             <div className="drawer-empty">
               <p>No civic issues match your current filters.</p>
             </div>
           ) : (
             <div className="drawer-list">
-              {issues.map((issue) => {
+              {displayedIssues.map((issue) => {
                 const statusCfg = STATUS_CONFIG[issue.status] ?? { label: issue.status, color: '#6366f1', bg: '#eff6ff' }
                 const isSelected = selectedIssue?.id === issue.id
 

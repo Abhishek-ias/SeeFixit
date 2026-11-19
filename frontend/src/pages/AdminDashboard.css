@@ -852,3 +852,107 @@
   font-weight: 600;
   color: #4b5563;
 }
+
+/* ── Chronic Hotspots Alert Bar ──────────────────────── */
+.chronic-hotspots-alert-bar {
+  background: linear-gradient(135deg, #fff1f2 0%, #fee2e2 100%);
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.9rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.08);
+}
+
+.hotspots-alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hotspots-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #991b1b;
+  font-size: 0.95rem;
+}
+
+.hotspot-badge-pulse {
+  animation: hotspotBadgePulse 1.8s infinite ease-in-out;
+}
+
+@keyframes hotspotBadgePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.hotspots-summary-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.hotspot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #fca5a5;
+  color: #7f1d1d;
+}
+
+.hotspot-chip-critical {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.hotspot-chip-high {
+  border-color: #f97316;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.hotspot-chip-moderate {
+  border-color: #eab308;
+  background: #fefce8;
+  color: #854d0e;
+}
+
+.chip-cat {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chip-risk {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.hotspots-map-link {
+  background: #dc2626;
+  color: #ffffff;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.55rem 1rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.3);
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.hotspots-map-link:hover {
+  background: #b91c1c;
+}

@@ -75,14 +75,45 @@ const HAZARD_RULES = [
     }
 ];
 
+const SENSITIVE_ZONE_RULES = [
+    {
+        type: "HEALTHCARE",
+        boost: 20,
+        keywords: [
+            "hospital", "clinic", "dispensary", "emergency room", "maternity",
+            "trauma", "ambulance", "doctor", "health center", "patient"
+        ],
+        badge: "Critical Healthcare Zone"
+    },
+    {
+        type: "EDUCATION",
+        boost: 15,
+        keywords: [
+            "school", "college", "university", "kindergarten", "daycare",
+            "pre-school", "campus", "students", "children", "play school"
+        ],
+        badge: "School / Child Safety Zone"
+    },
+    {
+        type: "TRANSIT",
+        boost: 15,
+        keywords: [
+            "metro station", "bus stop", "bus stand", "railway station", "pedestrian crossing",
+            "transit terminal", "zebra crossing", "flyover", "junction", "intersection"
+        ],
+        badge: "High-Traffic Transit Hub"
+    }
+];
+
 // ======================================================
 // AI CLASSIFICATION & TRIAGE ENGINE
 // ======================================================
 
 /**
- * Analyzes report title and description using the civic ontology rule engine.
+ * Analyzes report title and description using the civic ontology rule engine,
+ * factoring in sensitive infrastructure proximity and historical recurrence.
  */
-function analyzeText(title = "", description = "") {
+function analyzeText(title = "", description = "", { recurrenceCount = 0 } = {}) {
     const text = `${title} ${description}`.toLowerCase();
 
     // 1. Category scoring
@@ -141,8 +172,42 @@ function analyzeText(title = "", description = "") {
         else if (bestCategory === "LIGHTING") { severity = "MEDIUM"; severityScore = 50; }
     }
 
+    // 2b. Sensitive Zone Detection (Schools, Hospitals, Transit)
+    let detectedZone = null;
+    for (const zone of SENSITIVE_ZONE_RULES) {
+        for (const kw of zone.keywords) {
+            if (text.includes(kw)) {
+                detectedZone = zone;
+                break;
+            }
+        }
+        if (detectedZone) break;
+    }
+
+    if (detectedZone) {
+        severityScore = Math.min(100, severityScore + detectedZone.boost);
+        if (severity === "LOW") severity = "MEDIUM";
+        else if (severity === "MEDIUM" && severityScore >= 75) severity = "HIGH";
+        suggestedAction = `[${detectedZone.badge.toUpperCase()}] ${suggestedAction}`;
+    }
+
+    // 2c. Chronic Hotspot Recurrence Boost
+    const isChronic = Number(recurrenceCount) >= 2;
+    if (isChronic) {
+        severityScore = Math.min(100, severityScore + 15);
+        if (severity === "LOW") severity = "MEDIUM";
+        else if (severity === "MEDIUM") severity = "HIGH";
+        suggestedAction = `[CHRONIC HOTSPOT: ${recurrenceCount} recent nearby incidents] ${suggestedAction}`;
+    }
+
     // 3. Structured Summary
-    const summary = `${bestCategory} issue identified: "${title.trim()}". Classified with ${(confidence * 100).toFixed(0)}% confidence. Severity assessed as ${severity} (${severityScore}/100).`;
+    let summary = `${bestCategory} issue identified: "${title.trim()}". Classified with ${(confidence * 100).toFixed(0)}% confidence. Severity assessed as ${severity} (${severityScore}/100).`;
+    if (detectedZone) {
+        summary += ` Located in ${detectedZone.badge}.`;
+    }
+    if (isChronic) {
+        summary += ` ⚠️ Active chronic recurrence zone (${recurrenceCount} incidents within 200m).`;
+    }
 
     return {
         predictedCategory: bestCategory,
@@ -151,19 +216,41 @@ function analyzeText(title = "", description = "") {
         severityScore,
         safetyHazardDetected: Boolean(detectedHazard),
         hazardType: detectedHazard?.type || null,
+        sensitiveZoneDetected: Boolean(detectedZone),
+        sensitiveZoneType: detectedZone?.type || null,
+        isChronicHotspot: isChronic,
+        recurrenceCount: Number(recurrenceCount) || 0,
         recommendedDepartment: CATEGORY_RULES[bestCategory].department,
         summary,
         suggestedAction,
         modelProvider: "heuristic-civic-ontology",
-        modelVersion: "v1.0"
+        modelVersion: "v1.1"
     };
 }
 
 /**
  * Assesses a newly submitted report and persists the AI assessment.
+ * Context-aware: factors in coordinates for spatial recurrence detection.
  */
-async function assessReport(reportId, civicIssueId, title, description) {
-    const analysis = analyzeText(title, description);
+async function assessReport(reportId, civicIssueId, title, description, latitude = null, longitude = null) {
+    let recurrenceCount = 0;
+    if (latitude && longitude) {
+        try {
+            const { checkLocationRecurrence } = require("./gisService");
+            const recurrence = await checkLocationRecurrence({
+                latitude: Number(latitude),
+                longitude: Number(longitude),
+                radiusMeters: 200,
+                days: 60,
+                excludeIssueId: civicIssueId
+            });
+            recurrenceCount = recurrence.recurrenceCount;
+        } catch {
+            recurrenceCount = 0;
+        }
+    }
+
+    const analysis = analyzeText(title, description, { recurrenceCount });
 
     const client = await pool.connect();
     try {
@@ -206,7 +293,11 @@ async function assessReport(reportId, civicIssueId, title, description) {
             analysis.suggestedAction,
             JSON.stringify({
                 textScore: analysis.confidence,
-                hazardScore: analysis.severityScore
+                hazardScore: analysis.severityScore,
+                sensitiveZoneDetected: analysis.sensitiveZoneDetected,
+                sensitiveZoneType: analysis.sensitiveZoneType,
+                isChronicHotspot: analysis.isChronicHotspot,
+                recurrenceCount: analysis.recurrenceCount
             })
         ];
 
@@ -350,5 +441,6 @@ module.exports = {
     assessReport,
     getIssueAiAssessment,
     recordAiFeedback,
-    verifyResolutionEvidence
+    verifyResolutionEvidence,
+    SENSITIVE_ZONE_RULES
 };

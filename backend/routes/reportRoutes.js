@@ -52,6 +52,7 @@ const {
 } = require("../services/notificationService");
 
 const { haversineDistance } = require("../utils/gis");
+const { detectHotspots } = require("../services/gisService");
 const { analyzeText, recordAiFeedback } = require("../services/aiService");
 
 const {
@@ -365,6 +366,40 @@ router.get(
 
         }
 
+    }
+);
+
+
+// ======================================================
+// GET /api/issues/hotspots
+// Spatial Hotspot & Chronic Recurrence Detection API
+// Returns clustered issue zones with municipal engineering recommendations
+// PUBLIC / AUTHORITIES
+// ======================================================
+
+router.get(
+    "/issues/hotspots",
+    async (req, res, next) => {
+        try {
+            const { category, radius, minCount, days, status } = req.query;
+
+            const result = await detectHotspots({
+                category: category || null,
+                radiusMeters: radius ? Number(radius) : 300,
+                minIssues: minCount ? Number(minCount) : 2,
+                days: days !== undefined ? Number(days) : 60,
+                status: status || null
+            });
+
+            return sendSuccess(
+                res,
+                200,
+                "Hotspot clusters fetched successfully",
+                result
+            );
+        } catch (error) {
+            next(error);
+        }
     }
 );
 
