@@ -4,10 +4,29 @@ const { createNotification } = require("./notificationService");
 const { sendEscalationAlertEmail } = require("./mailService");
 
 /**
+ * Defensive schema guard ensuring SLA escalation columns exist.
+ */
+async function ensureEscalationSchema(db = pool) {
+    try {
+        await db.query(`
+            ALTER TABLE civic_issues
+            ADD COLUMN IF NOT EXISTS is_escalated BOOLEAN NOT NULL DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP WITH TIME ZONE NULL,
+            ADD COLUMN IF NOT EXISTS escalation_level INT NOT NULL DEFAULT 0;
+            CREATE INDEX IF NOT EXISTS idx_civic_issues_is_escalated ON civic_issues(is_escalated);
+            CREATE INDEX IF NOT EXISTS idx_civic_issues_escalation_level ON civic_issues(escalation_level);
+        `);
+    } catch {
+        // Non-blocking schema check
+    }
+}
+
+/**
  * Runs an SLA escalation audit sweep across all active civic grievances.
  * Flags overdue complaints, logs audit entries, and dispatches supervisory alerts.
  */
 async function runSlaEscalationScan() {
+    await ensureEscalationSchema();
     const client = await pool.connect();
 
     try {
@@ -168,6 +187,7 @@ async function runSlaEscalationScan() {
  * Retrieves aggregate metrics of currently escalated issues.
  */
 async function getEscalationStats() {
+    await ensureEscalationSchema();
     const query = `
         SELECT
             COUNT(*)::int AS total_escalated,
@@ -185,6 +205,7 @@ async function getEscalationStats() {
  * Retrieves a list of active escalated issues with full metadata.
  */
 async function getEscalatedIssues({ limit = 50, offset = 0 } = {}) {
+    await ensureEscalationSchema();
     const query = `
         SELECT
             ci.id,

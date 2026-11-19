@@ -276,13 +276,23 @@ async function gracefulShutdown(signal) {
     });
 }
 
+const { runAutoMigrations } = require("./db/autoMigrate");
+
 if (require.main === module) {
-    server = app.listen(port, () => {
-        logger.info("SeeFixit server started", {
-            port
+    (async () => {
+        try {
+            await runAutoMigrations();
+        } catch (migErr) {
+            logger.error("Auto-migration startup error", { error: migErr.message });
+        }
+
+        server = app.listen(port, () => {
+            logger.info("SeeFixit server started", {
+                port
+            });
+            startSlaBackgroundWorker();
         });
-        startSlaBackgroundWorker();
-    });
+    })();
 
     process.on("SIGINT", () => {
         gracefulShutdown("SIGINT");
