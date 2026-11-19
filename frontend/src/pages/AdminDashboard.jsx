@@ -299,6 +299,58 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     }
   }
 
+  // Handle CSV Export
+  async function handleExportCsv() {
+    try {
+      const queryParams = new URLSearchParams()
+      if (category) queryParams.append('category', category)
+      if (status) queryParams.append('status', status)
+      if (departmentId) queryParams.append('department_id', departmentId)
+
+      const res = await fetch(`/api/admin/export/csv?${queryParams.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `seefixit_export_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setNotice('CSV data exported successfully.')
+    } catch (err) {
+      setError(err.message || 'Failed to export CSV.')
+    }
+  }
+
+  // Handle GeoJSON GIS Export
+  async function handleExportGeoJson() {
+    try {
+      const queryParams = new URLSearchParams()
+      if (category) queryParams.append('category', category)
+      if (status) queryParams.append('status', status)
+      if (departmentId) queryParams.append('department_id', departmentId)
+
+      const res = await fetch(`/api/admin/export/geojson?${queryParams.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `seefixit_gis_${new Date().toISOString().slice(0, 10)}.geojson`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setNotice('GeoJSON GIS data exported successfully.')
+    } catch (err) {
+      setError(err.message || 'Failed to export GeoJSON.')
+    }
+  }
+
   if (user && user.role !== 'ADMIN') {
     return (
       <div className="admin-container">
@@ -445,6 +497,28 @@ function AdminDashboard({ token, user, onAuthRequired }) {
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
+        </div>
+
+        <div className="filter-item filter-export-group">
+          <label>Data Export</label>
+          <div className="export-btn-group">
+            <button
+              type="button"
+              className="export-action-btn"
+              onClick={handleExportCsv}
+              title="Export filtered complaints as CSV"
+            >
+              CSV 📊
+            </button>
+            <button
+              type="button"
+              className="export-action-btn"
+              onClick={handleExportGeoJson}
+              title="Export filtered complaints as GeoJSON for GIS software"
+            >
+              GIS 🗺️
+            </button>
+          </div>
         </div>
       </div>
 

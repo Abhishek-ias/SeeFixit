@@ -14,6 +14,7 @@ import MyReports  from './pages/MyReports'
 import IssueDetail from './pages/IssueDetail'
 import AdminDashboard from './pages/AdminDashboard'
 import MapView from './pages/MapView'
+import PublicTracker from './pages/PublicTracker'
 import NotificationBell from './components/NotificationBell'
 
 import { authApi } from './services/api'
@@ -124,6 +125,9 @@ function AppInner() {
         <nav className="nav-links">
           <Link to="/map" className="nav-dashboard-link">
             Civic Map 🗺️
+          </Link>
+          <Link to="/track" className="nav-dashboard-link">
+            Track Issue 🔍
           </Link>
           <a href="/#categories">Categories</a>
           <a href="/#how-it-works">How it works</a>
@@ -327,6 +331,10 @@ function AppInner() {
               />
             }
           />
+
+          {/* Public Complaint Tracker */}
+          <Route path="/track" element={<PublicTracker />} />
+          <Route path="/track/:id" element={<PublicTracker />} />
 
           {/* 404 */}
           <Route

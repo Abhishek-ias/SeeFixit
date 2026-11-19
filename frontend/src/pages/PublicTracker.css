@@ -1,0 +1,362 @@
+/* ── Public Issue Tracker ────────────────────────────── */
+
+.tracker-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+}
+
+.tracker-hero {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.tracker-eyebrow {
+  display: inline-block;
+  background: #ede9fe;
+  color: #4f46e5;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  margin-bottom: 0.75rem;
+}
+
+.tracker-hero h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 0.5rem;
+}
+
+.tracker-hero p {
+  color: #64748b;
+  font-size: 1rem;
+  max-width: 580px;
+  margin: 0 auto 1.5rem;
+}
+
+.tracker-search-form {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.tracker-search-form input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.tracker-search-form input:focus {
+  border-color: #4f46e5;
+}
+
+.tracker-search-form button {
+  background: #4f46e5;
+  color: white;
+  border: none;
+  padding: 0.75rem 1.4rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.tracker-search-form button:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.tracker-error-card {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 10px;
+  padding: 1.25rem;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.tracker-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem 0;
+  color: #64748b;
+}
+
+.tracker-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.tracker-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.tracker-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tracker-cat-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.tracker-title-group h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.35rem;
+  color: #1e293b;
+}
+
+.tracker-meta {
+  font-size: 0.85rem;
+  color: #64748b;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.tracker-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tracker-status-pill {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.tracker-sla-pill {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tracker-sla-pill.within-sla {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.tracker-sla-pill.overdue {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.tracker-sla-pill.sla-met {
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.tracker-sla-pill.sla-breached {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+/* Before & After Evidence */
+.tracker-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.tracker-photo-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.photo-label {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.photo-label.citizen-label {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.photo-label.officer-label {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.tracker-photo-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  display: block;
+}
+
+.resolution-caption {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #475569;
+  font-style: italic;
+  background: white;
+}
+
+.awaiting-evidence {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 1rem;
+}
+
+.awaiting-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Sections */
+.tracker-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.tracker-section h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+.tracker-coords {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+.tracker-map-link {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.tracker-map-link:hover {
+  text-decoration: underline;
+}
+
+/* Timeline */
+.tracker-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.tracker-timeline-step {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.timeline-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4f46e5;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.timeline-details {
+  font-size: 0.85rem;
+}
+
+.timeline-details strong {
+  color: #1e293b;
+  display: block;
+}
+
+.timeline-time {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.timeline-note {
+  margin: 0.2rem 0 0;
+  color: #475569;
+  font-style: italic;
+}
+
+/* Feedback box */
+.tracker-feedback-box {
+  background: #fafaf9;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.feedback-stars-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stars-val {
+  color: #f59e0b;
+  font-size: 1.2rem;
+}
+
+.feedback-count {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* Footer links */
+.tracker-footer-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2rem;
+  font-size: 0.88rem;
+}
+
+.tracker-footer-links a {
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.tracker-footer-links a:hover {
+  text-decoration: underline;
+}

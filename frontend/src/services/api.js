@@ -309,4 +309,12 @@ export const categoryApi = {
     }),
 };
 
+/**
+ * Public Transparency & Issue Tracking API.
+ */
+export const publicApi = {
+  getIssueTracking: (id) =>
+    apiRequest(`/public/issues/${id}`),
+};
+
 

@@ -1,7 +1,7 @@
 # SeeFixit — Master Project Status
 > Last updated: 2026-11-19 | Based on verified codebase audit
 
-## Current Phase: P0, P1, P2 & P3 Completed + Dynamic Categories & SLA Engine Active
+## Current Phase: Full Spectrum Civic Platform (P0, P1, P2, P3 + Public Tracking & GIS Export)
 
 ---
 
@@ -13,15 +13,16 @@
 | Local Root | `C:\SeeFixit` |
 | Latest Migrations (Neon DB & Local) | `000` through `016` completely applied & verified |
 | Dynamic Categories & SLA | ✅ Configurable `categories` table with custom SLA thresholds, dynamic form options & admin SLA badges |
-| Spatial Intelligence | ✅ PostGIS fallback + earthdistance & cube extensions, bounding box & spatial indexes active |
-| AI Intelligence | ✅ Rule-based & LLM-ready civic ontology classifier, hazard detector, severity scoring, resolution verification |
+| Spatial Intelligence & GIS Export | ✅ PostGIS fallback + earthdistance & cube extensions, bounding box & spatial indexes, GeoJSON export (`/api/admin/export/geojson`), CSV export (`/api/admin/export/csv`) |
+| Public Transparency Portal | ✅ Unauthenticated Public Complaint Tracker (`/track` & `/track/:id`) with before/after photos, timeline & satisfaction rating |
+| AI Intelligence Engine | ✅ Civic ontology classifier, hazard detector, severity scoring, resolution verification, officer feedback audit |
 | Citizen Experience | ✅ GPS capture, image upload pipeline, duplicate detection modal, citizen dashboard, resolution rating & dispute |
 | Authority Operations | ✅ Multi-status machine, officer assignments, audit logs, KPI metrics, triage modal, resolution evidence, SLA timers |
 | Citizen Engagement | ✅ Real-time in-app notification center, unread badges, resolution rating (1-5 stars), dispute reopening |
 | Standards & Interoperability | ✅ Open311 GeoReport v2 endpoints (`/services.json` and `/requests.json`) |
 | Production Infrastructure | ✅ Dockerfile (backend & frontend), Nginx SPA routing, docker-compose.yml, GitHub Actions CI workflow |
-| Automated Test Suites | ✅ 12/12 unit tests pass, 12/12 integration tests pass |
-| Frontend Verification | ✅ 0 warnings, 0 errors, Vite production build passes in ~350ms |
+| Automated Test Suites | ✅ 12/12 unit tests pass, 15/15 integration tests pass |
+| Frontend Verification | ✅ 0 warnings, 0 errors, Vite production build passes in ~600ms |
 
 ---
 
@@ -64,3 +65,5 @@
 - [x] P3.5: Configurable category management & department mapping (`categories` table, Migration 015)
 - [x] P3.6: Municipal SLA countdown timers (`Within SLA`, `Overdue`, `SLA Met`, `SLA Breached`)
 - [x] P3.7: Temporal audit tracking (`created_at` & `updated_at` timestamps on issues, Migration 016)
+- [x] P3.8: Public Complaint Tracker (`/track` & `/track/:id`) with before/after evidence photos
+- [x] P3.9: Municipal GIS GeoJSON Export & CSV Export in Admin Portal

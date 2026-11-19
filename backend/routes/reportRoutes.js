@@ -39,7 +39,10 @@ const {
     getCategories,
     createCategory,
     updateCategory,
-    getMunicipalAnalytics
+    getMunicipalAnalytics,
+    getPublicIssueTracking,
+    exportIssuesGeoJson,
+    exportIssuesCsv
 } = require("../services/issueService");
 
 const {
@@ -1248,6 +1251,59 @@ router.get(
         try {
             const analytics = await getMunicipalAnalytics();
             return sendSuccess(res, 200, "Municipal analytics fetched successfully", analytics);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ======================================================
+// PUBLIC TRANSPARENCY TRACKER
+// ======================================================
+
+router.get(
+    "/public/issues/:id",
+    validateId,
+    async (req, res, next) => {
+        try {
+            const data = await getPublicIssueTracking(req.params.id);
+            return sendSuccess(res, 200, "Public issue tracking fetched", data);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ======================================================
+// MUNICIPAL GIS & CSV DATA EXPORT
+// ======================================================
+
+router.get(
+    "/admin/export/geojson",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const geojson = await exportIssuesGeoJson(req.query);
+            res.setHeader("Content-Type", "application/geo+json");
+            res.setHeader("Content-Disposition", 'attachment; filename="seefixit_issues.geojson"');
+            return res.status(200).json(geojson);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.get(
+    "/admin/export/csv",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const csvData = await exportIssuesCsv(req.query);
+            res.setHeader("Content-Type", "text/csv");
+            res.setHeader("Content-Disposition", 'attachment; filename="seefixit_issues_export.csv"');
+            return res.status(200).send(csvData);
         } catch (err) {
             next(err);
         }

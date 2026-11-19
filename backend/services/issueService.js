@@ -1740,6 +1740,185 @@ async function getMunicipalAnalytics() {
     };
 }
 
+// ======================================================
+// PUBLIC TRANSPARENCY & TRACKING
+// ======================================================
+
+async function getPublicIssueTracking(issueId) {
+    const issueQuery = `
+        SELECT
+            ci.id,
+            ci.title,
+            ci.category,
+            ci.status,
+            ci.priority_score,
+            ci.latitude,
+            ci.longitude,
+            ci.created_at,
+            ci.resolved_at,
+            d.name AS department_name,
+            c.name AS category_name,
+            c.icon AS category_icon,
+            c.sla_hours,
+            COUNT(DISTINCT r.id)::int AS report_count,
+            (SELECT image FROM reports WHERE civic_issue_id = ci.id AND image IS NOT NULL LIMIT 1) AS initial_image,
+            (SELECT image FROM issue_evidence WHERE civic_issue_id = ci.id ORDER BY created_at DESC LIMIT 1) AS resolution_image,
+            (SELECT description FROM issue_evidence WHERE civic_issue_id = ci.id ORDER BY created_at DESC LIMIT 1) AS resolution_notes
+        FROM civic_issues ci
+        JOIN departments d ON ci.department_id = d.id
+        LEFT JOIN categories c ON ci.category = c.code
+        LEFT JOIN reports r ON ci.id = r.civic_issue_id
+        WHERE ci.id = $1
+        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, ci.created_at, ci.resolved_at, d.name, c.name, c.icon, c.sla_hours;
+    `;
+    const issueRes = await pool.query(issueQuery, [issueId]);
+    if (issueRes.rows.length === 0) {
+        throw new AppError("Civic issue not found", 404);
+    }
+    const issue = issueRes.rows[0];
+
+    const historyQuery = `
+        SELECT
+            ish.id,
+            ish.status,
+            ish.changed_at,
+            ish.note
+        FROM issue_status_history ish
+        WHERE ish.civic_issue_id = $1
+        ORDER BY ish.changed_at ASC;
+    `;
+    const historyRes = await pool.query(historyQuery, [issueId]);
+
+    const feedbackQuery = `
+        SELECT
+            ROUND(AVG(rating), 1) AS avg_rating,
+            COUNT(*)::int AS total_feedback,
+            ROUND((COUNT(CASE WHEN is_satisfied = TRUE THEN 1 END)::numeric / NULLIF(COUNT(*), 0)) * 100, 1) AS satisfaction_rate_percent
+        FROM resolution_feedback
+        WHERE civic_issue_id = $1;
+    `;
+    const feedbackRes = await pool.query(feedbackQuery, [issueId]);
+
+    const slaHours = issue.sla_hours || 72;
+    let slaStatus = 'WITHIN_SLA';
+    let slaHoursRemaining = 0;
+    if (issue.status === 'RESOLVED') {
+        const elapsedHours = (new Date(issue.resolved_at) - new Date(issue.created_at)) / 3600000;
+        slaStatus = elapsedHours <= slaHours ? 'SLA_MET' : 'SLA_BREACHED';
+    } else {
+        const elapsedHours = (Date.now() - new Date(issue.created_at)) / 3600000;
+        slaHoursRemaining = Math.round(slaHours - elapsedHours);
+        if (slaHoursRemaining < 0) slaStatus = 'OVERDUE';
+    }
+
+    return {
+        ...issue,
+        sla_status: slaStatus,
+        sla_hours_remaining: slaHoursRemaining,
+        timeline: historyRes.rows,
+        feedback: feedbackRes.rows[0] || null
+    };
+}
+
+// ======================================================
+// MUNICIPAL GIS & CSV EXPORTS
+// ======================================================
+
+async function exportIssuesGeoJson(filters = {}) {
+    const { category, status, department_id } = filters;
+    const conditions = [];
+    const values = [];
+
+    if (category) {
+        values.push(category);
+        conditions.push(`ci.category = $${values.length}`);
+    }
+    if (status) {
+        values.push(status);
+        conditions.push(`ci.status = $${values.length}`);
+    }
+    if (department_id) {
+        values.push(department_id);
+        conditions.push(`ci.department_id = $${values.length}`);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `
+        SELECT
+            ci.id,
+            ci.title,
+            ci.category,
+            ci.status,
+            ci.priority_score,
+            ci.latitude,
+            ci.longitude,
+            ci.created_at,
+            ci.resolved_at,
+            d.name AS department_name,
+            c.sla_hours
+        FROM civic_issues ci
+        JOIN departments d ON ci.department_id = d.id
+        LEFT JOIN categories c ON ci.category = c.code
+        ${whereClause}
+        ORDER BY ci.id DESC
+        LIMIT 5000;
+    `;
+    const res = await pool.query(query, values);
+
+    return {
+        type: "FeatureCollection",
+        features: res.rows.map(row => ({
+            type: "Feature",
+            geometry: {
+                type: "Point",
+                coordinates: [Number(row.longitude), Number(row.latitude)]
+            },
+            properties: {
+                id: row.id,
+                title: row.title,
+                category: row.category,
+                status: row.status,
+                priorityScore: row.priority_score,
+                department: row.department_name,
+                createdAt: row.created_at,
+                resolvedAt: row.resolved_at,
+                slaHours: row.sla_hours || 72
+            }
+        }))
+    };
+}
+
+async function exportIssuesCsv(filters = {}) {
+    const geoData = await exportIssuesGeoJson(filters);
+    const headers = ["ID", "Title", "Category", "Status", "Priority Score", "Department", "Latitude", "Longitude", "Created At", "Resolved At"];
+
+    function escapeCsv(val) {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+    }
+
+    const lines = [headers.join(",")];
+    for (const f of geoData.features) {
+        const p = f.properties;
+        const coords = f.geometry.coordinates;
+        lines.push([
+            p.id,
+            escapeCsv(p.title),
+            escapeCsv(p.category),
+            escapeCsv(p.status),
+            p.priorityScore,
+            escapeCsv(p.department),
+            coords[1],
+            coords[0],
+            escapeCsv(p.createdAt),
+            escapeCsv(p.resolvedAt)
+        ].join(","));
+    }
+
+    return lines.join("\r\n");
+}
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
@@ -1761,5 +1940,8 @@ module.exports = {
     getCategories,
     createCategory,
     updateCategory,
-    getMunicipalAnalytics
+    getMunicipalAnalytics,
+    getPublicIssueTracking,
+    exportIssuesGeoJson,
+    exportIssuesCsv
 };
