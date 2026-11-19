@@ -4,6 +4,7 @@ const { isPostgisAvailable, haversineDistance } = require("../utils/gis");
 const { assessReport, getIssueAiAssessment, verifyResolutionEvidence } = require("./aiService");
 const { notifyIssueCitizens, notifyAssignedOfficer } = require("./notificationService");
 const { sendReportConfirmationEmail } = require("./mailService");
+const { findWardByCoordinates, getAllWards, getWardAnalytics } = require("./wardService");
 
 async function updateIssueStatus(issueId, status, userId, note = null) {
 
@@ -618,6 +619,9 @@ async function createReport(
 
         else {
 
+            const ward = await findWardByCoordinates(latitude, longitude);
+            const wardId = ward?.id || null;
+
             if (hasPostgis) {
                 const createIssueQuery = `
                     INSERT INTO civic_issues (
@@ -628,7 +632,8 @@ async function createReport(
                         latitude,
                         longitude,
                         location,
-                        department_id
+                        department_id,
+                        ward_id
                     )
                     VALUES (
                         $1,
@@ -638,7 +643,8 @@ async function createReport(
                         $3,
                         $4,
                         ST_SetSRID(ST_MakePoint($4, $3), 4326)::geography,
-                        $5
+                        $5,
+                        $6
                     )
                     RETURNING id;
                 `;
@@ -647,7 +653,8 @@ async function createReport(
                     category,
                     latitude,
                     longitude,
-                    departmentId
+                    departmentId,
+                    wardId
                 ]);
                 civicIssueId = newIssueResult.rows[0].id;
             } else {
@@ -659,7 +666,8 @@ async function createReport(
                         priority_score,
                         latitude,
                         longitude,
-                        department_id
+                        department_id,
+                        ward_id
                     )
                     VALUES (
                         $1,
@@ -668,7 +676,8 @@ async function createReport(
                         50,
                         $3,
                         $4,
-                        $5
+                        $5,
+                        $6
                     )
                     RETURNING id;
                 `;
@@ -677,7 +686,8 @@ async function createReport(
                     category,
                     latitude,
                     longitude,
-                    departmentId
+                    departmentId,
+                    wardId
                 ]);
                 civicIssueId = newIssueResult.rows[0].id;
             }
@@ -688,6 +698,9 @@ async function createReport(
         // ------------------------------------------
         // Create report
         // ------------------------------------------
+
+        const reportWard = await findWardByCoordinates(latitude, longitude);
+        const reportWardId = reportWard?.id || null;
 
         let insertReportQuery;
         let insertReportValues;
@@ -703,12 +716,14 @@ async function createReport(
                     image,
                     latitude,
                     longitude,
-                    location
+                    location,
+                    ward_id
                 )
                 VALUES (
                     $1, $2, $3, $4, $5, $6,
                     $7, $8,
-                    ST_SetSRID(ST_MakePoint($8, $7), 4326)::geography
+                    ST_SetSRID(ST_MakePoint($8, $7), 4326)::geography,
+                    $9
                 )
                 RETURNING *;
             `;
@@ -720,7 +735,8 @@ async function createReport(
                 category,
                 image,
                 latitude,
-                longitude
+                longitude,
+                reportWardId
             ];
         } else {
             insertReportQuery = `
@@ -732,9 +748,10 @@ async function createReport(
                     category,
                     image,
                     latitude,
-                    longitude
+                    longitude,
+                    ward_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING *;
             `;
             insertReportValues = [
@@ -745,7 +762,8 @@ async function createReport(
                 category,
                 image,
                 latitude,
-                longitude
+                longitude,
+                reportWardId
             ];
         }
 
@@ -885,10 +903,16 @@ async function getIssueDetails(issueId) {
             civic_issues.priority_score,
             civic_issues.latitude,
             civic_issues.longitude,
+            civic_issues.ward_id,
+            mw.ward_number,
+            mw.name AS ward_name,
+            mw.zone_name,
             departments.name AS department_name
         FROM civic_issues
         JOIN departments
             ON civic_issues.department_id = departments.id
+        LEFT JOIN municipal_wards mw
+            ON civic_issues.ward_id = mw.id
         WHERE civic_issues.id = $1;
     `;
 
@@ -1035,7 +1059,9 @@ async function getAllIssues(
     status,
     sortBy,
     order,
-    departmentId
+    departmentId,
+    wardId,
+    assignedTo
 ) {
 
     page = Number(page);
@@ -1107,6 +1133,24 @@ async function getAllIssues(
         );
     }
 
+    if (wardId) {
+        filterValues.push(Number(wardId));
+        conditions.push(
+            `civic_issues.ward_id = $${filterValues.length}`
+        );
+    }
+
+    if (assignedTo) {
+        filterValues.push(Number(assignedTo));
+        conditions.push(
+            `EXISTS (
+                SELECT 1 FROM issue_assignments ia
+                WHERE ia.civic_issue_id = civic_issues.id
+                  AND ia.assigned_to = $${filterValues.length}
+            )`
+        );
+    }
+
     const whereClause =
         conditions.length > 0
             ? `WHERE ${conditions.join(" AND ")}`
@@ -1131,6 +1175,10 @@ async function getAllIssues(
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
+            civic_issues.ward_id,
+            mw.ward_number,
+            mw.name AS ward_name,
+            mw.zone_name,
             civic_issues.created_at,
             civic_issues.resolved_at,
             COALESCE(c.sla_hours, 72) AS sla_hours,
@@ -1158,6 +1206,8 @@ async function getAllIssues(
         FROM civic_issues
         JOIN departments
             ON civic_issues.department_id = departments.id
+        LEFT JOIN municipal_wards mw
+            ON civic_issues.ward_id = mw.id
         LEFT JOIN categories c
             ON civic_issues.category = c.code
         LEFT JOIN reports
@@ -1172,6 +1222,10 @@ async function getAllIssues(
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
+            civic_issues.ward_id,
+            mw.ward_number,
+            mw.name,
+            mw.zone_name,
             civic_issues.created_at,
             civic_issues.resolved_at,
             c.sla_hours,
@@ -1780,6 +1834,10 @@ async function getPublicIssueTracking(issueId) {
             ci.longitude,
             ci.created_at,
             ci.resolved_at,
+            ci.ward_id,
+            mw.ward_number,
+            mw.name AS ward_name,
+            mw.zone_name,
             d.name AS department_name,
             c.name AS category_name,
             c.icon AS category_icon,
@@ -1790,10 +1848,11 @@ async function getPublicIssueTracking(issueId) {
             (SELECT description FROM issue_evidence WHERE civic_issue_id = ci.id ORDER BY created_at DESC LIMIT 1) AS resolution_notes
         FROM civic_issues ci
         JOIN departments d ON ci.department_id = d.id
+        LEFT JOIN municipal_wards mw ON ci.ward_id = mw.id
         LEFT JOIN categories c ON ci.category = c.code
         LEFT JOIN reports r ON ci.id = r.civic_issue_id
         WHERE ci.id = $1
-        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, ci.created_at, ci.resolved_at, d.name, c.name, c.icon, c.sla_hours;
+        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, ci.created_at, ci.resolved_at, ci.ward_id, mw.ward_number, mw.name, mw.zone_name, d.name, c.name, c.icon, c.sla_hours;
     `;
     const issueRes = await pool.query(issueQuery, [issueId]);
     if (issueRes.rows.length === 0) {
@@ -1967,5 +2026,8 @@ module.exports = {
     getMunicipalAnalytics,
     getPublicIssueTracking,
     exportIssuesGeoJson,
-    exportIssuesCsv
+    exportIssuesCsv,
+    findWardByCoordinates,
+    getAllWards,
+    getWardAnalytics
 };

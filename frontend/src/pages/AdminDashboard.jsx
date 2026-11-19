@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { issueApi, adminApi, aiApi } from '../services/api'
+import { issueApi, adminApi, aiApi, wardApi } from '../services/api'
 import './AdminDashboard.css'
 
 const STATUS_CONFIG = {
@@ -57,6 +57,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
   const [stats, setStats] = useState(null)
   const [officers, setOfficers] = useState([])
   const [departments, setDepartments] = useState([])
+  const [wards, setWards] = useState([])
   const [hotspots, setHotspots] = useState([])
 
   const [issues, setIssues] = useState([])
@@ -70,6 +71,8 @@ function AdminDashboard({ token, user, onAuthRequired }) {
   const [category, setCategory] = useState('')
   const [status, setStatus] = useState('')
   const [departmentId, setDepartmentId] = useState('')
+  const [wardId, setWardId] = useState('')
+  const [assignedToMeOnly, setAssignedToMeOnly] = useState(false)
 
   // Selected issue for triage / detail modal
   const [selectedIssueId, setSelectedIssueId] = useState(null)
@@ -98,7 +101,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     }
   }, [token, onAuthRequired])
 
-  // Load static lists (stats, officers, departments)
+  // Load static lists (stats, officers, departments, wards, hotspots)
   useEffect(() => {
     if (!token || user?.role !== 'ADMIN') return
 
@@ -113,6 +116,10 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     adminApi.getDepartments()
       .then((res) => setDepartments(res?.data ?? []))
       .catch((err) => console.error('Failed to load departments:', err))
+
+    wardApi.getAll()
+      .then((res) => setWards(res?.data ?? []))
+      .catch((err) => console.error('Failed to load wards:', err))
 
     issueApi.getHotspots({ days: 60, minIssues: 2 })
       .then((res) => setHotspots(res?.data?.hotspots ?? []))
@@ -134,6 +141,8 @@ function AdminDashboard({ token, user, onAuthRequired }) {
         category: category || undefined,
         status: status || undefined,
         department_id: departmentId || undefined,
+        ward_id: wardId || undefined,
+        assigned_to: assignedToMeOnly ? user?.id : undefined,
         sortBy: 'id',
         order: 'desc',
       })
@@ -146,7 +155,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     } finally {
       setLoading(false)
     }
-  }, [token, user, search, category, status, departmentId])
+  }, [token, user, search, category, status, departmentId, wardId, assignedToMeOnly])
 
   // Load issues when filter parameters change
   useEffect(() => {
@@ -474,6 +483,24 @@ function AdminDashboard({ token, user, onAuthRequired }) {
         </div>
       )}
 
+      {/* ── Operational Scope Tabs (All Complaints vs My Tasks) ── */}
+      <div className="work-order-scope-tabs">
+        <button
+          type="button"
+          className={`scope-tab ${!assignedToMeOnly ? 'active' : ''}`}
+          onClick={() => setAssignedToMeOnly(false)}
+        >
+          🌐 City-Wide Issues ({pagination.total})
+        </button>
+        <button
+          type="button"
+          className={`scope-tab ${assignedToMeOnly ? 'active' : ''}`}
+          onClick={() => setAssignedToMeOnly(true)}
+        >
+          🎯 My Assigned Tasks
+        </button>
+      </div>
+
       {/* ── Filter Bar ── */}
       <div className="admin-filter-bar">
         <div className="filter-item filter-search">
@@ -524,6 +551,22 @@ function AdminDashboard({ token, user, onAuthRequired }) {
             <option value="">All Departments</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-item">
+          <label htmlFor="ward-select">Municipal Ward</label>
+          <select
+            id="ward-select"
+            value={wardId}
+            onChange={(e) => setWardId(e.target.value)}
+          >
+            <option value="">All Wards & Zones</option>
+            {wards.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.ward_number} — {w.name}
+              </option>
             ))}
           </select>
         </div>
@@ -585,7 +628,12 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                     <td className="cell-id">#{issue.issue_id}</td>
                     <td className="cell-title">
                       <strong>{issue.issue_title}</strong>
-                      <span className="cell-coords">📍 {Number(issue.latitude).toFixed(4)}, {Number(issue.longitude).toFixed(4)}</span>
+                      <div className="cell-sub-info">
+                        <span className="ward-pill" title={`${issue.ward_name || 'General Jurisdiction'} (${issue.zone_name || 'Metropolitan'})`}>
+                          🏛️ {issue.ward_number || 'WARD-100'}
+                        </span>
+                        <span className="cell-coords">📍 {Number(issue.latitude).toFixed(4)}, {Number(issue.longitude).toFixed(4)}</span>
+                      </div>
                     </td>
                     <td><span className="category-pill">{issue.category_icon ? `${issue.category_icon} ` : ''}{issue.category}</span></td>
                     <td>{issue.department_name || '—'}</td>
@@ -687,6 +735,12 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                   <div className="modal-summary-grid">
                     <div><strong>Category:</strong> {issueDetails.issue.category}</div>
                     <div><strong>Department:</strong> {issueDetails.issue.department_name}</div>
+                    <div>
+                      <strong>Municipal Ward:</strong>{' '}
+                      {issueDetails.issue.ward_number
+                        ? `${issueDetails.issue.ward_number} — ${issueDetails.issue.ward_name} (${issueDetails.issue.zone_name})`
+                        : 'WARD-100 — General Jurisdiction'}
+                    </div>
                     <div>
                       <strong>Status:</strong>{' '}
                       <span style={{ color: STATUS_CONFIG[issueDetails.issue.status]?.color }}>

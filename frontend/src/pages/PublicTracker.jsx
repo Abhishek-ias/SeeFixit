@@ -111,6 +111,12 @@ function PublicTracker() {
                   <span>{issue.category_name || issue.category}</span>
                   <span>·</span>
                   <span>🏛️ {issue.department_name}</span>
+                  {issue.ward_number && (
+                    <>
+                      <span>·</span>
+                      <span>📍 {issue.ward_number} ({issue.ward_name})</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

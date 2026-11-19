@@ -56,6 +56,16 @@ const issueFilterSchema = Joi.object({
         .positive()
         .optional(),
 
+    ward_id: Joi.number()
+        .integer()
+        .positive()
+        .optional(),
+
+    assigned_to: Joi.number()
+        .integer()
+        .positive()
+        .optional(),
+
     page: Joi.number()
         .integer()
         .min(1)

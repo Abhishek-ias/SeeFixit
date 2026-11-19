@@ -326,4 +326,15 @@ export const publicApi = {
     apiRequest(`/public/issues/${id}`),
 };
 
+/**
+ * Municipal Administrative Wards & Zones APIs.
+ */
+export const wardApi = {
+  getAll: () =>
+    apiRequest('/wards'),
+
+  getAnalytics: (wardId) =>
+    apiRequest(`/wards/${wardId}/analytics`),
+};
+
 

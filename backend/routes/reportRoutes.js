@@ -42,7 +42,9 @@ const {
     getMunicipalAnalytics,
     getPublicIssueTracking,
     exportIssuesGeoJson,
-    exportIssuesCsv
+    exportIssuesCsv,
+    getAllWards,
+    getWardAnalytics
 } = require("../services/issueService");
 
 const {
@@ -607,6 +609,8 @@ router.get(
             const category = req.query.category;
             const status = req.query.status;
             const department_id = req.query.department_id;
+            const ward_id = req.query.ward_id;
+            const assigned_to = req.query.assigned_to;
 
             const sortBy = req.query.sortBy;
             const order = req.query.order;
@@ -619,7 +623,9 @@ router.get(
                 status,
                 sortBy,
                 order,
-                department_id
+                department_id,
+                ward_id,
+                assigned_to
             );
 
             return sendSuccess(
@@ -877,6 +883,56 @@ router.get(
 
         }
 
+    }
+);
+
+
+// ======================================================
+// GET /api/wards
+// List all registered municipal wards and zones
+// PUBLIC
+// ======================================================
+
+router.get(
+    "/wards",
+    async (req, res, next) => {
+        try {
+            const wards = await getAllWards();
+            return sendSuccess(
+                res,
+                200,
+                "Municipal wards fetched successfully",
+                wards
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ======================================================
+// GET /api/wards/:id/analytics
+// Get performance and grievance health analytics for a ward
+// PUBLIC / AUTHORITIES
+// ======================================================
+
+router.get(
+    "/wards/:id/analytics",
+    async (req, res, next) => {
+        try {
+            const ward = await getWardAnalytics(req.params.id);
+            if (!ward) {
+                return sendError(res, 404, "Municipal ward not found");
+            }
+            return sendSuccess(
+                res,
+                200,
+                "Ward analytics fetched successfully",
+                ward
+            );
+        } catch (error) {
+            next(error);
+        }
     }
 );
 
