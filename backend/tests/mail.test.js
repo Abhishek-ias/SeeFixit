@@ -1,13 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const {
+    const {
     sendEmail,
     getSentEmails,
     clearSentEmails,
     sendReportConfirmationEmail,
     sendStatusUpdateEmail,
     sendResolutionEmail,
-    sendOfficerAssignmentEmail
+    sendOfficerAssignmentEmail,
+    sendEscalationAlertEmail
 } = require("../services/mailService");
 
 test.beforeEach(() => {
@@ -88,4 +89,26 @@ test("sendOfficerAssignmentEmail alerts field officer with priority score", asyn
     assert.equal(sent[0].to, "officer@municipality.gov");
     assert.ok(sent[0].subject.includes("Priority: 95"));
     assert.ok(sent[0].html.includes("Inspector Verma"));
+});
+
+test("sendEscalationAlertEmail dispatches urgent alert on SLA breach", async () => {
+    const res = await sendEscalationAlertEmail({
+        email: "commissioner@municipality.gov",
+        officerName: "Zonal Commissioner",
+        issueId: 99,
+        title: "Major sewage backup in school zone",
+        department: "Sanitation Department",
+        slaHours: 24,
+        overdueHours: 18,
+        escalationLevel: 2
+    });
+
+    assert.equal(res.success, true);
+    const sent = getSentEmails();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].to, "commissioner@municipality.gov");
+    assert.ok(sent[0].subject.includes("URGENT ESCALATION"));
+    assert.ok(sent[0].subject.includes("#99"));
+    assert.ok(sent[0].html.includes("CRITICAL SLA BREACH"));
+    assert.ok(sent[0].html.includes("18 hours"));
 });

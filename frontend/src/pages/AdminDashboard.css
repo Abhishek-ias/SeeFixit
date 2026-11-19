@@ -1007,3 +1007,92 @@
   font-size: 0.72rem;
   font-weight: 700;
 }
+
+/* ── SLA Escalation UI Components ────────────────────── */
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-escalate-btn {
+  background: #fee2e2;
+  border: 1px solid #f87171;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-escalate-btn:hover:not(:disabled) {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.admin-escalate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scope-tab-escalated {
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.scope-tab-escalated:hover {
+  background: #fef2f2;
+}
+
+.scope-tab-escalated.active {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.35);
+}
+
+.critical-escalated {
+  background: #450a0a;
+  color: #fecaca;
+  border: 1px solid #ef4444;
+  animation: criticalPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes criticalPulse {
+  0% { opacity: 0.85; }
+  50% { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 0.85; }
+}
+
+.modal-escalation-alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 5px solid #dc2626;
+  border-radius: 8px;
+  padding: 0.85rem 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.modal-escalation-icon {
+  font-size: 1.4rem;
+}
+
+.modal-escalation-text strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #991b1b;
+  margin-bottom: 0.2rem;
+}
+
+.modal-escalation-text p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #450a0a;
+  line-height: 1.35;
+}

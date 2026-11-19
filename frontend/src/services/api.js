@@ -234,6 +234,15 @@ export const adminApi = {
 
   getAnalytics: (token) =>
     apiRequest('/admin/analytics', { token }),
+
+  scanSla: (token) =>
+    apiRequest('/admin/sla/scan', {
+      method: 'POST',
+      token,
+    }),
+
+  getEscalations: (token) =>
+    apiRequest('/admin/sla/escalations', { token }),
 };
 
 /**

@@ -41,12 +41,13 @@ test("assignIssueSchema validates assignment payload", () => {
     assert.ok(invalid.error);
 });
 
-test("issueFilterSchema accepts extended statuses, department_id, ward_id, and assigned_to", () => {
+test("issueFilterSchema accepts extended statuses, department_id, ward_id, assigned_to, and is_escalated", () => {
     const { error, value } = issueFilterSchema.validate({
         status: "ON_HOLD",
         department_id: 3,
         ward_id: 2,
         assigned_to: 10,
+        is_escalated: true,
         page: 2,
         limit: 20
     });
@@ -55,4 +56,5 @@ test("issueFilterSchema accepts extended statuses, department_id, ward_id, and a
     assert.equal(value.department_id, 3);
     assert.equal(value.ward_id, 2);
     assert.equal(value.assigned_to, 10);
+    assert.equal(value.is_escalated, true);
 });

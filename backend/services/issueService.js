@@ -904,6 +904,9 @@ async function getIssueDetails(issueId) {
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.ward_id,
+            civic_issues.is_escalated,
+            civic_issues.escalation_level,
+            civic_issues.escalated_at,
             mw.ward_number,
             mw.name AS ward_name,
             mw.zone_name,
@@ -1061,7 +1064,8 @@ async function getAllIssues(
     order,
     departmentId,
     wardId,
-    assignedTo
+    assignedTo,
+    isEscalated
 ) {
 
     page = Number(page);
@@ -1151,6 +1155,13 @@ async function getAllIssues(
         );
     }
 
+    if (isEscalated !== undefined && isEscalated !== null) {
+        filterValues.push(String(isEscalated) === "true");
+        conditions.push(
+            `civic_issues.is_escalated = $${filterValues.length}`
+        );
+    }
+
     const whereClause =
         conditions.length > 0
             ? `WHERE ${conditions.join(" AND ")}`
@@ -1176,6 +1187,9 @@ async function getAllIssues(
             civic_issues.longitude,
             civic_issues.department_id,
             civic_issues.ward_id,
+            civic_issues.is_escalated,
+            civic_issues.escalation_level,
+            civic_issues.escalated_at,
             mw.ward_number,
             mw.name AS ward_name,
             mw.zone_name,
@@ -1223,6 +1237,9 @@ async function getAllIssues(
             civic_issues.longitude,
             civic_issues.department_id,
             civic_issues.ward_id,
+            civic_issues.is_escalated,
+            civic_issues.escalation_level,
+            civic_issues.escalated_at,
             mw.ward_number,
             mw.name,
             mw.zone_name,

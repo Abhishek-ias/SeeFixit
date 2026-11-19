@@ -73,6 +73,8 @@ function AdminDashboard({ token, user, onAuthRequired }) {
   const [departmentId, setDepartmentId] = useState('')
   const [wardId, setWardId] = useState('')
   const [assignedToMeOnly, setAssignedToMeOnly] = useState(false)
+  const [escalatedOnly, setEscalatedOnly] = useState(false)
+  const [escalationScanning, setEscalationScanning] = useState(false)
 
   // Selected issue for triage / detail modal
   const [selectedIssueId, setSelectedIssueId] = useState(null)
@@ -143,6 +145,7 @@ function AdminDashboard({ token, user, onAuthRequired }) {
         department_id: departmentId || undefined,
         ward_id: wardId || undefined,
         assigned_to: assignedToMeOnly ? user?.id : undefined,
+        is_escalated: escalatedOnly ? true : undefined,
         sortBy: 'id',
         order: 'desc',
       })
@@ -155,7 +158,22 @@ function AdminDashboard({ token, user, onAuthRequired }) {
     } finally {
       setLoading(false)
     }
-  }, [token, user, search, category, status, departmentId, wardId, assignedToMeOnly])
+  }, [token, user, search, category, status, departmentId, wardId, assignedToMeOnly, escalatedOnly])
+
+  const handleScanSla = async () => {
+    setEscalationScanning(true)
+    setError('')
+    try {
+      const res = await adminApi.scanSla(token)
+      setNotice(`⚡ SLA Scan Completed: ${res?.data?.newlyEscalatedCount || 0} issues newly escalated out of ${res?.data?.totalScanned || 0} overdue tickets checked.`)
+      fetchIssues(1)
+      adminApi.getStats(token).then((r) => setStats(r?.data))
+    } catch (err) {
+      setError(err.message || 'Failed to execute SLA escalation scan.')
+    } finally {
+      setEscalationScanning(false)
+    }
+  }
 
   // Load issues when filter parameters change
   useEffect(() => {
@@ -386,12 +404,22 @@ function AdminDashboard({ token, user, onAuthRequired }) {
           <h1>Authority Management Portal</h1>
           <p>Triage, assign, track SLA, and verify civic issue resolution.</p>
         </div>
-        <button
-          onClick={() => { fetchIssues(pagination.page); adminApi.getStats(token).then(r => setStats(r?.data)) }}
-          className="admin-refresh-btn"
-        >
-          🔄 Refresh Data
-        </button>
+        <div className="admin-header-actions">
+          <button
+            onClick={handleScanSla}
+            className="admin-escalate-btn"
+            disabled={escalationScanning}
+            title="Scan active issues and trigger formal supervisory escalations for breached SLAs"
+          >
+            {escalationScanning ? 'Scanning…' : '⚡ Escalate Overdue SLAs'}
+          </button>
+          <button
+            onClick={() => { fetchIssues(pagination.page); adminApi.getStats(token).then(r => setStats(r?.data)) }}
+            className="admin-refresh-btn"
+          >
+            🔄 Refresh Data
+          </button>
+        </div>
       </div>
 
       {notice && (
@@ -483,21 +511,37 @@ function AdminDashboard({ token, user, onAuthRequired }) {
         </div>
       )}
 
-      {/* ── Operational Scope Tabs (All Complaints vs My Tasks) ── */}
+      {/* ── Operational Scope Tabs (All Complaints vs My Tasks vs Escalated) ── */}
       <div className="work-order-scope-tabs">
         <button
           type="button"
-          className={`scope-tab ${!assignedToMeOnly ? 'active' : ''}`}
-          onClick={() => setAssignedToMeOnly(false)}
+          className={`scope-tab ${!assignedToMeOnly && !escalatedOnly ? 'active' : ''}`}
+          onClick={() => {
+            setAssignedToMeOnly(false)
+            setEscalatedOnly(false)
+          }}
         >
           🌐 City-Wide Issues ({pagination.total})
         </button>
         <button
           type="button"
           className={`scope-tab ${assignedToMeOnly ? 'active' : ''}`}
-          onClick={() => setAssignedToMeOnly(true)}
+          onClick={() => {
+            setAssignedToMeOnly(true)
+            setEscalatedOnly(false)
+          }}
         >
           🎯 My Assigned Tasks
+        </button>
+        <button
+          type="button"
+          className={`scope-tab scope-tab-escalated ${escalatedOnly ? 'active' : ''}`}
+          onClick={() => {
+            setEscalatedOnly(true)
+            setAssignedToMeOnly(false)
+          }}
+        >
+          🚨 Escalated Grievances
         </button>
       </div>
 
@@ -673,6 +717,14 @@ function AdminDashboard({ token, user, onAuthRequired }) {
                           ⚠️ Breached
                         </span>
                       )}
+                      {issue.is_escalated && (
+                        <span
+                          className={`sla-badge-pill ${Number(issue.escalation_level) >= 2 ? 'critical-escalated' : 'overdue'}`}
+                          title={`Formally escalated to supervisory authorities (Level ${issue.escalation_level || 1})`}
+                        >
+                          🚨 {Number(issue.escalation_level) >= 2 ? 'L2 Critical' : 'L1 Escalated'}
+                        </span>
+                      )}
                       {!issue.sla_status && <span className="sla-badge-pill">72h SLA</span>}
                     </td>
                     <td>
@@ -729,6 +781,17 @@ function AdminDashboard({ token, user, onAuthRequired }) {
               </div>
             ) : issueDetails ? (
               <div className="modal-body">
+                {/* SLA Escalation Warning Banner */}
+                {issueDetails.issue.is_escalated && (
+                  <div className="modal-escalation-alert">
+                    <span className="modal-escalation-icon">🚨</span>
+                    <div className="modal-escalation-text">
+                      <strong>SUPERVISORY SLA ESCALATION (Level {issueDetails.issue.escalation_level || 1})</strong>
+                      <p>This grievance breached target resolution time and has been formally escalated to departmental oversight authorities.</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Issue Header Info */}
                 <div className="modal-summary-card">
                   <h3>{issueDetails.issue.issue_title}</h3>

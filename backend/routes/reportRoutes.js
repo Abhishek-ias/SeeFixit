@@ -55,6 +55,7 @@ const {
 
 const { haversineDistance } = require("../utils/gis");
 const { detectHotspots } = require("../services/gisService");
+const { runSlaEscalationScan, getEscalationStats, getEscalatedIssues } = require("../services/escalationService");
 const { analyzeText, recordAiFeedback } = require("../services/aiService");
 
 const {
@@ -611,6 +612,7 @@ router.get(
             const department_id = req.query.department_id;
             const ward_id = req.query.ward_id;
             const assigned_to = req.query.assigned_to;
+            const is_escalated = req.query.is_escalated;
 
             const sortBy = req.query.sortBy;
             const order = req.query.order;
@@ -625,7 +627,8 @@ router.get(
                 order,
                 department_id,
                 ward_id,
-                assigned_to
+                assigned_to,
+                is_escalated
             );
 
             return sendSuccess(
@@ -1344,6 +1347,50 @@ router.get(
             return sendSuccess(res, 200, "Municipal analytics fetched successfully", analytics);
         } catch (err) {
             next(err);
+        }
+    }
+);
+
+// ======================================================
+// POST /api/admin/sla/scan
+// Triggers an SLA escalation scan across all active complaints
+// ADMIN ONLY
+// ======================================================
+
+router.post(
+    "/admin/sla/scan",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const result = await runSlaEscalationScan();
+            return sendSuccess(res, 200, "SLA escalation scan completed successfully", result);
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ======================================================
+// GET /api/admin/sla/escalations
+// Retrieves aggregate stats and list of escalated issues
+// ADMIN ONLY
+// ======================================================
+
+router.get(
+    "/admin/sla/escalations",
+    authenticateToken,
+    requireRole("ADMIN"),
+    async (req, res, next) => {
+        try {
+            const stats = await getEscalationStats();
+            const issues = await getEscalatedIssues({
+                limit: req.query.limit || 50,
+                offset: req.query.offset || 0
+            });
+            return sendSuccess(res, 200, "Escalations fetched successfully", { stats, issues });
+        } catch (error) {
+            next(error);
         }
     }
 );

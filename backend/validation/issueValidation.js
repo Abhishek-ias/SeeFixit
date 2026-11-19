@@ -66,6 +66,9 @@ const issueFilterSchema = Joi.object({
         .positive()
         .optional(),
 
+    is_escalated: Joi.boolean()
+        .optional(),
+
     page: Joi.number()
         .integer()
         .min(1)

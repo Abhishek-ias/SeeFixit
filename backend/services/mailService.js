@@ -146,6 +146,47 @@ async function sendOfficerAssignmentEmail({ email, officerName = "Officer", issu
     return sendEmail({ to: email, subject, text, html });
 }
 
+/**
+ * Sends urgent SLA escalation alert to supervisory authorities and assigned officer.
+ */
+async function sendEscalationAlertEmail({
+    email,
+    officerName = "Officer",
+    issueId,
+    title,
+    department,
+    slaHours = 72,
+    overdueHours = 0,
+    escalationLevel = 1
+}) {
+    const adminUrl = `${process.env.CLIENT_ORIGIN || "http://localhost:5173"}/admin`;
+    const urgency = escalationLevel >= 2 ? "CRITICAL SLA BREACH (Level 2)" : "SLA BREACH ESCALATION (Level 1)";
+    const subject = `[URGENT ESCALATION] Issue #${issueId} Breached SLA (+${overdueHours}h)`;
+    const text = `ATTENTION: ${urgency}\n\nIssue #${issueId}: "${title}" has exceeded the municipal SLA target of ${slaHours} hours.\nDepartment: ${department}\nOverdue By: ${overdueHours} hours\nEscalation Level: ${escalationLevel}\n\nImmediate departmental intervention required: ${adminUrl}\n\n- SeeFixit SLA Oversight`;
+    const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 2px solid #dc2626; border-radius: 8px;">
+            <div style="background-color: #dc2626; color: #ffffff; padding: 10px 16px; border-radius: 4px; font-weight: bold; text-align: center; text-transform: uppercase;">
+                🚨 ${urgency}
+            </div>
+            <p style="margin-top: 15px;">Hello <strong>${officerName}</strong>,</p>
+            <p>The following municipal grievance has exceeded its permitted resolution timeframe and has been automatically escalated:</p>
+            <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 14px; margin: 15px 0;">
+                <p style="margin: 0 0 6px 0;"><strong>Issue ID:</strong> #${issueId}</p>
+                <p style="margin: 0 0 6px 0;"><strong>Title:</strong> ${title}</p>
+                <p style="margin: 0 0 6px 0;"><strong>Department:</strong> ${department}</p>
+                <p style="margin: 0 0 6px 0;"><strong>SLA Target:</strong> ${slaHours} hours</p>
+                <p style="margin: 0; color: #b91c1c;"><strong>Overdue By:</strong> <strong>${overdueHours} hours</strong></p>
+            </div>
+            <p>Please re-prioritize field resources or reassign this ticket immediately:</p>
+            <p style="text-align: center; margin: 25px 0;">
+                <a href="${adminUrl}" style="background-color: #dc2626; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Open Authority Console</a>
+            </p>
+        </div>
+    `;
+
+    return sendEmail({ to: email, subject, text, html });
+}
+
 module.exports = {
     sendEmail,
     getSentEmails,
@@ -153,5 +194,6 @@ module.exports = {
     sendReportConfirmationEmail,
     sendStatusUpdateEmail,
     sendResolutionEmail,
-    sendOfficerAssignmentEmail
+    sendOfficerAssignmentEmail,
+    sendEscalationAlertEmail
 };
