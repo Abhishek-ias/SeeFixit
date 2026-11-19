@@ -229,6 +229,14 @@ function IssueDetail({ token, onAuthRequired }) {
             <span>Report #{report.id}</span>
             <span>·</span>
             <span>{new Date(report.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            {report.civic_issue_id && (
+              <>
+                <span>·</span>
+                <Link to={`/track/${report.civic_issue_id}`} style={{ color: '#4f46e5', fontWeight: 600 }}>
+                  Public Tracking Portal ↗
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <StatusBadge status={report.civic_issue_status} />

@@ -192,10 +192,48 @@ app.use(
 // ======================================================
 
 const port = config.server.port;
+const { runSlaEscalationScan } = require("./services/escalationService");
 
 let server;
 let isShuttingDown = false;
 let forceShutdownStarted = false;
+let slaScanTimer = null;
+let slaInitialTimeout = null;
+
+function startSlaBackgroundWorker() {
+    if (process.env.ENABLE_SLA_WORKER === "false") {
+        logger.info("SLA background escalation worker disabled via ENABLE_SLA_WORKER=false");
+        return;
+    }
+
+    const intervalMs = Number(process.env.SLA_SCAN_INTERVAL_MS) || 15 * 60 * 1000;
+    logger.info("Starting SLA background escalation worker", { intervalMinutes: Math.round(intervalMs / 60000) });
+
+    slaInitialTimeout = setTimeout(async () => {
+        try {
+            const stats = await runSlaEscalationScan();
+            logger.info("Initial SLA escalation sweep completed", stats);
+        } catch (err) {
+            logger.error("Initial SLA escalation sweep error", { error: err.message });
+        }
+    }, 10000);
+
+    slaScanTimer = setInterval(async () => {
+        try {
+            const stats = await runSlaEscalationScan();
+            if (stats.newlyEscalated > 0 || stats.criticalLevel2 > 0) {
+                logger.warn("SLA escalation sweep flagged overdue issues", stats);
+            }
+        } catch (err) {
+            logger.error("Periodic SLA escalation sweep error", { error: err.message });
+        }
+    }, intervalMs);
+}
+
+function stopSlaBackgroundWorker() {
+    if (slaInitialTimeout) clearTimeout(slaInitialTimeout);
+    if (slaScanTimer) clearInterval(slaScanTimer);
+}
 
 async function gracefulShutdown(signal) {
     if (isShuttingDown) {
@@ -213,6 +251,7 @@ async function gracefulShutdown(signal) {
     }
 
     isShuttingDown = true;
+    stopSlaBackgroundWorker();
 
     logger.info("Graceful shutdown started", {
         signal
@@ -242,6 +281,7 @@ if (require.main === module) {
         logger.info("SeeFixit server started", {
             port
         });
+        startSlaBackgroundWorker();
     });
 
     process.on("SIGINT", () => {

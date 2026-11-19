@@ -44,8 +44,14 @@ const {
     exportIssuesGeoJson,
     exportIssuesCsv,
     getAllWards,
-    getWardAnalytics
+    getWardAnalytics,
+    toggleIssueUpvote,
+    getIssueUpvoteStatus
 } = require("../services/issueService");
+
+const {
+    getWardIssues
+} = require("../services/wardService");
 
 const {
     getUserNotifications,
@@ -932,6 +938,91 @@ router.get(
                 200,
                 "Ward analytics fetched successfully",
                 ward
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ======================================================
+// GET /api/wards/:id/issues
+// Public neighborhood feed of issues in a specific ward
+// PUBLIC
+// ======================================================
+
+router.get(
+    "/wards/:id/issues",
+    validateId,
+    async (req, res, next) => {
+        try {
+            const { page = 1, limit = 20, status } = req.query;
+            const data = await getWardIssues(req.params.id, { page, limit, status });
+            return sendSuccess(
+                res,
+                200,
+                "Ward issues fetched successfully",
+                data
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ======================================================
+// POST /api/issues/:id/upvote
+// Toggle citizen corroboration upvote (+1)
+// AUTHENTICATED
+// ======================================================
+
+router.post(
+    "/issues/:id/upvote",
+    authenticateToken,
+    validateId,
+    async (req, res, next) => {
+        try {
+            const result = await toggleIssueUpvote(req.user.id, req.params.id);
+            return sendSuccess(
+                res,
+                200,
+                result.upvoted ? "Issue upvoted successfully" : "Upvote removed",
+                result
+            );
+        } catch (error) {
+            next(error);
+        }
+    }
+);
+
+// ======================================================
+// GET /api/issues/:id/upvote-status
+// Check upvote status for current user
+// PUBLIC / AUTHENTICATED
+// ======================================================
+
+router.get(
+    "/issues/:id/upvote-status",
+    validateId,
+    async (req, res, next) => {
+        try {
+            let userId = null;
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith("Bearer ")) {
+                try {
+                    const jwt = require("jsonwebtoken");
+                    const config = require("../config/config");
+                    const token = authHeader.split(" ")[1];
+                    const decoded = jwt.verify(token, config.jwt.secret);
+                    userId = decoded.id;
+                } catch {}
+            }
+            const result = await getIssueUpvoteStatus(userId, req.params.id);
+            return sendSuccess(
+                res,
+                200,
+                "Upvote status retrieved",
+                result
             );
         } catch (error) {
             next(error);

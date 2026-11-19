@@ -196,6 +196,15 @@ export const issueApi = {
     ).toString();
     return apiRequest(`/issues/hotspots${query ? `?${query}` : ''}`);
   },
+
+  toggleUpvote: (id, token) =>
+    apiRequest(`/issues/${id}/upvote`, {
+      method: 'POST',
+      token,
+    }),
+
+  getUpvoteStatus: (id, token) =>
+    apiRequest(`/issues/${id}/upvote-status`, { token }),
 };
 
 /**
@@ -344,6 +353,15 @@ export const wardApi = {
 
   getAnalytics: (wardId) =>
     apiRequest(`/wards/${wardId}/analytics`),
+
+  getIssues: (wardId, params = {}) => {
+    const query = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
+      )
+    ).toString();
+    return apiRequest(`/wards/${wardId}/issues${query ? `?${query}` : ''}`);
+  },
 };
 
 

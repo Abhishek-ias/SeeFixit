@@ -901,6 +901,7 @@ async function getIssueDetails(issueId) {
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
+            civic_issues.upvote_count,
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.ward_id,
@@ -1183,6 +1184,7 @@ async function getAllIssues(
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
+            civic_issues.upvote_count,
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
@@ -1233,6 +1235,7 @@ async function getAllIssues(
             civic_issues.category,
             civic_issues.status,
             civic_issues.priority_score,
+            civic_issues.upvote_count,
             civic_issues.latitude,
             civic_issues.longitude,
             civic_issues.department_id,
@@ -1509,6 +1512,7 @@ async function getMapIssues({ category, status, min_lat, max_lat, min_lng, max_l
             ci.category,
             ci.status,
             ci.priority_score,
+            ci.upvote_count,
             ci.latitude,
             ci.longitude,
             d.name AS department_name,
@@ -1517,7 +1521,7 @@ async function getMapIssues({ category, status, min_lat, max_lat, min_lng, max_l
         JOIN departments d ON ci.department_id = d.id
         LEFT JOIN reports r ON ci.id = r.civic_issue_id
         ${whereClause}
-        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, d.name
+        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.upvote_count, ci.latitude, ci.longitude, d.name
         ORDER BY ci.priority_score DESC, ci.id DESC
         LIMIT 300;
     `;
@@ -1847,6 +1851,7 @@ async function getPublicIssueTracking(issueId) {
             ci.category,
             ci.status,
             ci.priority_score,
+            ci.upvote_count,
             ci.latitude,
             ci.longitude,
             ci.created_at,
@@ -1869,7 +1874,7 @@ async function getPublicIssueTracking(issueId) {
         LEFT JOIN categories c ON ci.category = c.code
         LEFT JOIN reports r ON ci.id = r.civic_issue_id
         WHERE ci.id = $1
-        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.latitude, ci.longitude, ci.created_at, ci.resolved_at, ci.ward_id, mw.ward_number, mw.name, mw.zone_name, d.name, c.name, c.icon, c.sla_hours;
+        GROUP BY ci.id, ci.title, ci.category, ci.status, ci.priority_score, ci.upvote_count, ci.latitude, ci.longitude, ci.created_at, ci.resolved_at, ci.ward_id, mw.ward_number, mw.name, mw.zone_name, d.name, c.name, c.icon, c.sla_hours;
     `;
     const issueRes = await pool.query(issueQuery, [issueId]);
     if (issueRes.rows.length === 0) {
@@ -2019,6 +2024,104 @@ async function exportIssuesCsv(filters = {}) {
     return lines.join("\r\n");
 }
 
+// ======================================================
+// COMMUNITY UPVOTES & CORROBORATION
+// ======================================================
+
+/**
+ * Toggles citizen upvote on a civic issue.
+ * If user hasn't upvoted: creates upvote record, increments upvote_count, boosts priority_score (+2 up to 100 cap).
+ * If user already upvoted: removes upvote record, decrements upvote_count, reduces priority_score (-2).
+ */
+async function toggleIssueUpvote(userId, issueId) {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+
+        const issueRes = await client.query(
+            "SELECT id, status, priority_score, upvote_count FROM civic_issues WHERE id = $1 FOR UPDATE;",
+            [issueId]
+        );
+        if (issueRes.rows.length === 0) {
+            throw new AppError("Civic issue not found", 404);
+        }
+
+        const issue = issueRes.rows[0];
+
+        const existingUpvote = await client.query(
+            "SELECT id FROM civic_issue_upvotes WHERE civic_issue_id = $1 AND user_id = $2;",
+            [issueId, userId]
+        );
+
+        let upvoted = false;
+        let newCount = issue.upvote_count;
+        let newScore = issue.priority_score;
+
+        if (existingUpvote.rows.length > 0) {
+            await client.query(
+                "DELETE FROM civic_issue_upvotes WHERE id = $1;",
+                [existingUpvote.rows[0].id]
+            );
+            newCount = Math.max(0, issue.upvote_count - 1);
+            newScore = Math.max(1, issue.priority_score - 2);
+            upvoted = false;
+        } else {
+            await client.query(
+                "INSERT INTO civic_issue_upvotes (civic_issue_id, user_id) VALUES ($1, $2);",
+                [issueId, userId]
+            );
+            newCount = issue.upvote_count + 1;
+            newScore = Math.min(100, issue.priority_score + 2);
+            upvoted = true;
+        }
+
+        await client.query(
+            "UPDATE civic_issues SET upvote_count = $1, priority_score = $2 WHERE id = $3;",
+            [newCount, newScore, issueId]
+        );
+
+        await client.query("COMMIT");
+
+        return {
+            upvoted,
+            upvote_count: newCount,
+            priority_score: newScore
+        };
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+/**
+ * Checks if a user has upvoted an issue and returns total upvotes.
+ */
+async function getIssueUpvoteStatus(userId, issueId) {
+    const issueRes = await pool.query(
+        "SELECT id, upvote_count FROM civic_issues WHERE id = $1;",
+        [issueId]
+    );
+    if (issueRes.rows.length === 0) {
+        throw new AppError("Civic issue not found", 404);
+    }
+
+    let upvoted = false;
+    if (userId) {
+        const check = await pool.query(
+            "SELECT 1 FROM civic_issue_upvotes WHERE civic_issue_id = $1 AND user_id = $2 LIMIT 1;",
+            [issueId, userId]
+        );
+        upvoted = check.rows.length > 0;
+    }
+
+    return {
+        upvoted,
+        upvote_count: issueRes.rows[0].upvote_count
+    };
+}
+
 module.exports = {
     updateIssueStatus,
     getIssueHistory,
@@ -2046,5 +2149,7 @@ module.exports = {
     exportIssuesCsv,
     findWardByCoordinates,
     getAllWards,
-    getWardAnalytics
+    getWardAnalytics,
+    toggleIssueUpvote,
+    getIssueUpvoteStatus
 };

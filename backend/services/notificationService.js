@@ -32,9 +32,12 @@ async function notifyIssueCitizens({ civicIssueId, title, message, type = "STATU
     try {
         const query = `
             SELECT DISTINCT u.id, u.email, u.name
-            FROM reports r
-            JOIN users u ON r.user_id = u.id
-            WHERE r.civic_issue_id = $1
+            FROM (
+                SELECT user_id FROM reports WHERE civic_issue_id = $1
+                UNION
+                SELECT user_id FROM civic_issue_upvotes WHERE civic_issue_id = $1
+            ) affected
+            JOIN users u ON affected.user_id = u.id
         `;
         const res = await pool.query(query, [civicIssueId]);
         const promises = [];

@@ -333,8 +333,24 @@ function AppInner() {
           />
 
           {/* Public Complaint Tracker */}
-          <Route path="/track" element={<PublicTracker />} />
-          <Route path="/track/:id" element={<PublicTracker />} />
+          <Route
+            path="/track"
+            element={
+              <PublicTracker
+                token={session?.token}
+                onAuthRequired={handleAuthRequired}
+              />
+            }
+          />
+          <Route
+            path="/track/:id"
+            element={
+              <PublicTracker
+                token={session?.token}
+                onAuthRequired={handleAuthRequired}
+              />
+            }
+          />
 
           {/* 404 */}
           <Route

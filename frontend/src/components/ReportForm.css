@@ -251,6 +251,19 @@
   background: rgba(0, 0, 0, 0.8);
 }
 
+.report-detected-ward {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 /* ── Duplicate warning modal ───────────────────────── */
 
 .duplicate-modal {

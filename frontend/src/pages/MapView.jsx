@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { issueApi } from '../services/api'
@@ -197,9 +198,13 @@ function MapView() {
           <div class="popup-meta">
             <span>🏛️ ${issue.department_name || 'Department'}</span>
             <span>👥 ${issue.report_count} report${issue.report_count !== 1 ? 's' : ''}</span>
+            ${issue.upvote_count > 0 ? `<span>· 👍 ${issue.upvote_count}</span>` : ''}
           </div>
           <div class="popup-coords">
             📍 ${issue.latitude.toFixed(5)}, ${issue.longitude.toFixed(5)}
+          </div>
+          <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #f1f5f9; text-align: right;">
+            <a href="/track/${issue.id}" style="color: #4f46e5; font-size: 11px; font-weight: 600; text-decoration: none;">Track & Corroborate ↗</a>
           </div>
         </div>
       `
@@ -444,8 +449,8 @@ function MapView() {
                     </div>
 
                     <div className="drawer-card-footer">
-                      <span>👥 {issue.report_count} report{issue.report_count !== 1 ? 's' : ''}</span>
-                      <span className="drawer-card-link">View Pin 📍</span>
+                      <span>👥 {issue.report_count} report{issue.report_count !== 1 ? 's' : ''}{issue.upvote_count > 0 ? ` · 👍 ${issue.upvote_count}` : ''}</span>
+                      <Link to={`/track/${issue.id}`} className="drawer-card-link" onClick={(e) => e.stopPropagation()}>Track ↗</Link>
                     </div>
                   </article>
                 )

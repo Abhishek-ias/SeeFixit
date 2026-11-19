@@ -1,6 +1,6 @@
 
 import { useState, useRef, useEffect } from 'react'
-import { reportApi, aiApi, categoryApi } from '../services/api'
+import { reportApi, aiApi, categoryApi, wardApi } from '../services/api'
 import './ReportForm.css'
 
 const DEFAULT_CATEGORIES = [
@@ -88,6 +88,41 @@ function ReportForm({ token, onClose, onReportCreated }) {
     loadCategories()
     return () => { active = false }
   }, [])
+
+  // Municipal Wards Jurisdiction state
+  const [wards, setWards] = useState([])
+
+  useEffect(() => {
+    let active = true
+    async function loadWards() {
+      try {
+        const res = await wardApi.getAll()
+        if (active && res?.data && Array.isArray(res.data)) {
+          setWards(res.data)
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+    loadWards()
+    return () => { active = false }
+  }, [])
+
+  // Derive detected ward during render
+  const detectedWard = (() => {
+    if (!location.latitude || !location.longitude || !wards.length) return null
+    const lat = Number(location.latitude)
+    const lng = Number(location.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+
+    return (
+      wards.find((w) =>
+        w.ward_number !== 'WARD-100' &&
+        lat >= Number(w.min_lat) && lat <= Number(w.max_lat) &&
+        lng >= Number(w.min_lng) && lng <= Number(w.max_lng)
+      ) || wards.find((w) => w.ward_number === 'WARD-100') || null
+    )
+  })()
 
   // ── field helpers ───────────────────────────────────────
   function updateField(field, value) {
@@ -496,6 +531,12 @@ function ReportForm({ token, onClose, onReportCreated }) {
                 required
               />
             </div>
+
+            {detectedWard && (
+              <div className="report-detected-ward">
+                🏛️ <strong>Jurisdiction:</strong> {detectedWard.ward_number} — {detectedWard.name} ({detectedWard.zone_name})
+              </div>
+            )}
 
             {locationError && (
               <p className="report-error" role="alert">{locationError}</p>
